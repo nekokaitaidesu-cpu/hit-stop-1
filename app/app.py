@@ -1,250 +1,276 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-# ページ設定
-st.set_page_config(page_title="ヒットストップ体験実験室", layout="centered")
+# ページ設定だっち
+st.set_page_config(page_title="Hit Stop & Gravity Othello", layout="wide")
 
-st.title("🥊 ヒットストップ体験実験室")
-st.caption("桜井政博さんの動画で解説されていた「ヒットストップ」と「振動」の効果を体験するっち！🍄")
+st.title("🍄 重力オセロ：ヒットストップ体験")
+st.write("黒丸（●）を掴んで、白丸（○）に投げつけてみて！ぶつかると「ヒットストップ」するっち！😊")
 
-# --- サイドバーでパラメータ調整 ---
-st.sidebar.header("🔧 設定パラメータ")
-
-hit_stop_duration = st.sidebar.slider(
-    "⏱️ ヒットストップ時間 (ミリ秒)",
-    min_value=0,
-    max_value=500,
-    value=150,
-    step=10,
-    help="攻撃が当たった瞬間に時が止まる長さだっち。"
-)
-
-shake_intensity = st.sidebar.slider(
-    "🫨 振動の強さ (ピクセル)",
-    min_value=0,
-    max_value=20,
-    value=5,
-    step=1,
-    help="ヒットストップ中にキャラクターがガクガク揺れる幅だっち。"
-)
-
-shake_victim_only = st.sidebar.checkbox(
-    "対象のみ揺らす (動画のこだわり)",
-    value=True,
-    help="動画で言っていた「攻撃側は揺らさず、やられた側だけ揺らす」設定だっち。"
-)
-
-st.sidebar.markdown("---")
-st.sidebar.info("設定を変えたら、画面内の「RELOAD」ボタンか、攻撃ボタンを押して試してみてね！")
-
-# --- ゲーム画面 (HTML/JS) の埋め込み ---
-# Pythonの変数をJSに渡すためにf-stringを使うっち
-html_code = f"""
+# ゲームのHTML/JSコンポーネント
+# Streamlit上で滑らかに動かすために、CanvasとJavaScriptを使うっち
+html_code = """
 <!DOCTYPE html>
 <html>
 <head>
 <style>
-  body {{ margin: 0; background-color: #222; color: white; font-family: sans-serif; overflow: hidden; }}
-  #game-container {{
-    position: relative;
-    width: 600px;
-    height: 300px;
-    background-color: #333;
-    border: 2px solid #555;
-    margin: 0 auto;
-    border-radius: 8px;
-  }}
-  .character {{
-    position: absolute;
-    width: 50px;
-    height: 50px;
-    bottom: 50px;
-    border-radius: 4px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-size: 24px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-  }}
-  #attacker {{ left: 50px; background-color: #ff4b4b; z-index: 2; }} /* Streamlit Red */
-  #defender {{ right: 50px; background-color: #4b9bff; z-index: 1; }} /* Streamlit Blue */
-  
-  #controls {{ text-align: center; margin-top: 10px; }}
-  button {{
-    padding: 10px 20px;
-    font-size: 16px;
-    cursor: pointer;
-    background-color: #ff4b4b;
-    color: white;
-    border: none;
-    border-radius: 4px;
-  }}
-  button:hover {{ background-color: #ff2b2b; }}
-  
-  .impact-effect {{
-    position: absolute;
-    width: 80px;
-    height: 80px;
-    background: radial-gradient(circle, rgba(255,255,0,1) 0%, rgba(255,0,0,0) 70%);
-    opacity: 0;
-    pointer-events: none;
-    transform: translate(-50%, -50%);
-    z-index: 10;
-  }}
+    body { margin: 0; overflow: hidden; background-color: #f0f2f6; display: flex; justify-content: center; align-items: center; height: 100vh; }
+    canvas { background-color: #262730; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
 </style>
 </head>
 <body>
-
-<div id="game-container">
-  <div id="attacker" class="character">👊</div>
-  <div id="defender" class="character">😧</div>
-  <div id="effect" class="impact-effect"></div>
-</div>
-
-<div id="controls">
-  <button onclick="startAttack()">アタック！ (Spaceキー)</button>
-  <p style="font-size: 12px; color: #aaa;">現在の設定: 停止 {hit_stop_duration}ms / 揺れ {shake_intensity}px</p>
-</div>
-
+<canvas id="gameCanvas" width="800" height="500"></canvas>
 <script>
-  // Pythonから受け取ったパラメータ
-  const HIT_STOP_MS = {hit_stop_duration};
-  const SHAKE_INTENSITY = {shake_intensity};
-  const SHAKE_VICTIM_ONLY = {'true' if shake_victim_only else 'false'};
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
 
-  const attacker = document.getElementById('attacker');
-  const defender = document.getElementById('defender');
-  const effect = document.getElementById('effect');
-  
-  let animationId = null;
-  let isAttacking = false;
-  let isHitStopping = false;
-  
-  // 初期位置
-  const startX = 50;
-  const targetX = 450; // 衝突位置
-  let currentX = startX;
-  const speed = 15; // 移動速度
+    // パラメータ設定
+    const GRAVITY = 0.5;
+    const FRICTION = 0.98;
+    const BOUNCE = 0.7;
+    const HIT_STOP_DURATION = 15; // フレーム数（ヒットストップの長さ）
+    const SHAKE_INTENSITY = 10;   // シェイクの激しさ
 
-  function startAttack() {{
-    if (isAttacking) return;
-    isAttacking = true;
-    currentX = startX;
-    attacker.style.left = currentX + 'px';
-    defender.style.transform = 'translate(0, 0)';
-    attacker.style.transform = 'translate(0, 0)';
-    effect.style.opacity = 0;
+    // オブジェクトの状態
+    let black = { x: 100, y: 100, vx: 0, vy: 0, radius: 30, isDragging: false };
+    let white = { x: 600, y: 250, baseX: 600, baseY: 250, radius: 30, color: 'white' };
     
-    loop();
-  }}
+    // インタラクション用
+    let dragOffsetX = 0;
+    let dragOffsetY = 0;
+    let lastMouseX = 0;
+    let lastMouseY = 0;
 
-  function loop() {{
-    if (isHitStopping) {{
-      // ヒットストップ中：振動処理
-      // ランダムに位置をずらす（動画の解説通り、元の位置はずらさず描画位置だけずらすイメージ）
-      const shakeX = (Math.random() - 0.5) * SHAKE_INTENSITY * 2;
-      const shakeY = (Math.random() - 0.5) * SHAKE_INTENSITY * 2;
-      
-      defender.style.transform = `translate(${{shakeX}}px, ${{shakeY}}px)`;
-      
-      if (!SHAKE_VICTIM_ONLY) {{
-         // 攻撃側も揺らす場合（少し弱めに）
-         const attShakeX = (Math.random() - 0.5) * (SHAKE_INTENSITY/2);
-         const attShakeY = (Math.random() - 0.5) * (SHAKE_INTENSITY/2);
-         attacker.style.transform = `translate(${{attShakeX}}px, ${{attShakeY}}px)`;
-      }}
-      
-      animationId = requestAnimationFrame(loop);
-      return;
-    }}
+    // 演出用
+    let hitStopTimer = 0;
+    let shakeTimer = 0;
+    let particles = [];
 
-    // 移動処理
-    currentX += speed;
-    
-    // 衝突判定（簡易）
-    if (currentX >= targetX - 50) {{ // 50は幅
-      onHit();
-    }} else {{
-      attacker.style.left = currentX + 'px';
-      
-      // 画面外に出たらリセット
-      if (currentX > 600) {{
-        isAttacking = false;
-        currentX = startX;
-        attacker.style.left = startX + 'px';
-        return; 
-      }}
-      animationId = requestAnimationFrame(loop);
-    }}
-  }}
+    // エフェクトパーティクルクラス
+    class Particle {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 5 + 2;
+            this.vx = Math.cos(angle) * speed;
+            this.vy = Math.sin(angle) * speed;
+            this.life = 1.0;
+            this.decay = Math.random() * 0.05 + 0.02;
+        }
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.life -= this.decay;
+        }
+        draw(ctx) {
+            ctx.globalAlpha = this.life;
+            ctx.fillStyle = '#FFD700'; // 金色の火花
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1.0;
+        }
+    }
 
-  function onHit() {{
-    // 衝突位置に固定
-    currentX = targetX - 50; 
-    attacker.style.left = currentX + 'px';
-    
-    // エフェクト表示
-    effect.style.left = (targetX - 25) + 'px';
-    effect.style.top = (300 - 75) + 'px'; // 高さ調整
-    effect.style.opacity = 1;
+    // マウスイベント
+    canvas.addEventListener('mousedown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
 
-    // ヒットストップ開始！
-    isHitStopping = true;
-    
-    setTimeout(() => {{
-      // ヒットストップ終了
-      isHitStopping = false;
-      effect.style.opacity = 0;
-      defender.style.transform = 'translate(0, 0)';
-      attacker.style.transform = 'translate(0, 0)';
-      
-      // 吹き飛び（簡易アニメ）
-      knockback();
-    }}, HIT_STOP_MS);
-  }}
+        // 黒丸との距離
+        const dist = Math.hypot(mx - black.x, my - black.y);
+        if (dist < black.radius * 2) { // 判定を少し大きめに
+            black.isDragging = true;
+            dragOffsetX = black.x - mx;
+            dragOffsetY = black.y - my;
+            black.vx = 0;
+            black.vy = 0;
+        }
+    });
 
-  function knockback() {{
-    // やられた側が少し下がる演出
-    defender.style.transition = 'transform 0.2s';
-    defender.style.transform = 'translateX(50px) rotate(10deg)';
-    
-    // 攻撃側はそのまま走り抜ける
-    const finishRun = () => {{
-      currentX += speed;
-      attacker.style.left = currentX + 'px';
-      if (currentX < 650) {{
-        requestAnimationFrame(finishRun);
-      }} else {{
-        isAttacking = false;
-        defender.style.transition = 'none';
-        defender.style.transform = 'translate(0, 0)';
-        currentX = startX;
-        attacker.style.left = startX + 'px';
-      }}
-    }};
-    finishRun();
-  }}
+    canvas.addEventListener('mousemove', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
 
-  // スペースキーで攻撃
-  document.addEventListener('keydown', (e) => {{
-    if (e.code === 'Space') startAttack();
-  }});
+        if (black.isDragging) {
+            black.x = mx + dragOffsetX;
+            black.y = my + dragOffsetY;
+            
+            // 投げるための速度計算
+            black.vx = (mx - lastMouseX) * 0.5; // 感度調整
+            black.vy = (my - lastMouseY) * 0.5;
+        }
+        lastMouseX = mx;
+        lastMouseY = my;
+    });
 
+    canvas.addEventListener('mouseup', () => {
+        if (black.isDragging) {
+            black.isDragging = false;
+        }
+    });
+
+    // メインループ
+    function update() {
+        // --- ヒットストップ中の処理 ---
+        if (hitStopTimer > 0) {
+            hitStopTimer--;
+            
+            // 白丸をシェイクさせる（横揺れ）
+            // ヒットストップ中は物理演算を止めるのがポイント！
+            if (hitStopTimer > 0) {
+                const shakeX = (Math.random() - 0.5) * SHAKE_INTENSITY;
+                const shakeY = (Math.random() - 0.5) * SHAKE_INTENSITY * 0.2; // 縦は控えめに
+                white.x = white.baseX + shakeX;
+                white.y = white.baseY + shakeY;
+            } else {
+                white.x = white.baseX;
+                white.y = white.baseY;
+            }
+            
+            draw();
+            requestAnimationFrame(update);
+            return; // ここで物理更新をスキップしてリターン
+        }
+
+        // --- 物理更新 ---
+        
+        if (!black.isDragging) {
+            // 重力
+            black.vy += GRAVITY;
+            // 摩擦（空気抵抗）
+            black.vx *= FRICTION;
+            black.vy *= FRICTION;
+
+            // 位置更新
+            black.x += black.vx;
+            black.y += black.vy;
+
+            // 壁の跳ね返り
+            if (black.x + black.radius > canvas.width) {
+                black.x = canvas.width - black.radius;
+                black.vx *= -BOUNCE;
+            } else if (black.x - black.radius < 0) {
+                black.x = black.radius;
+                black.vx *= -BOUNCE;
+            }
+            if (black.y + black.radius > canvas.height) {
+                black.y = canvas.height - black.radius;
+                black.vy *= -BOUNCE;
+            } else if (black.y - black.radius < 0) {
+                black.y = black.radius;
+                black.vy *= -BOUNCE;
+            }
+        }
+
+        // --- 衝突判定（黒丸 vs 白丸） ---
+        const dx = black.x - white.x;
+        const dy = black.y - white.y;
+        const distance = Math.hypot(dx, dy);
+        const minDist = black.radius + white.radius;
+
+        if (distance < minDist) {
+            // 衝突発生！
+            
+            // 1. ヒットストップ開始
+            hitStopTimer = HIT_STOP_DURATION;
+
+            // 2. エフェクト発生（パーティクル）
+            for(let i=0; i<15; i++) {
+                particles.push(new Particle(
+                    black.x + (dx/distance) * black.radius, // 接触点付近
+                    black.y + (dy/distance) * black.radius
+                ));
+            }
+
+            // 3. 反発処理（物理的に跳ね返す）
+            const angle = Math.atan2(dy, dx);
+            const speed = Math.sqrt(black.vx**2 + black.vy**2);
+            // 相手に当たったら少し跳ね返る
+            black.vx = Math.cos(angle) * (speed * 0.8 + 5); 
+            black.vy = Math.sin(angle) * (speed * 0.8 + 5);
+            
+            // 埋まり防止
+            const overlap = minDist - distance;
+            black.x += Math.cos(angle) * overlap;
+            black.y += Math.sin(angle) * overlap;
+        }
+
+        // パーティクル更新
+        particles = particles.filter(p => p.life > 0);
+        particles.forEach(p => p.update());
+
+        draw();
+        requestAnimationFrame(update);
+    }
+
+    // 描画処理
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 床（グリッド）
+        ctx.strokeStyle = '#444';
+        ctx.lineWidth = 1;
+        for(let i=0; i<canvas.width; i+=100) {
+            ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i, canvas.height); ctx.stroke();
+        }
+        for(let i=0; i<canvas.height; i+=100) {
+            ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(canvas.width, i); ctx.stroke();
+        }
+
+        // 白丸（相手）
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(white.x, white.y, white.radius, 0, Math.PI * 2);
+        ctx.fill();
+        // 白丸の縁取り
+        ctx.strokeStyle = '#ccc';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // 黒丸（自分）
+        ctx.fillStyle = 'black';
+        ctx.beginPath();
+        ctx.arc(black.x, black.y, black.radius, 0, Math.PI * 2);
+        ctx.fill();
+        // 黒丸のハイライト（立体感）
+        ctx.fillStyle = '#555';
+        ctx.beginPath();
+        ctx.arc(black.x - 10, black.y - 10, 5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // エフェクト描画
+        // ヒット時のみ表示される衝撃波リング
+        if (hitStopTimer > 0) {
+            ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)';
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.arc(
+                (black.x + white.x) / 2, 
+                (black.y + white.y) / 2, 
+                black.radius + 20 + (HIT_STOP_DURATION - hitStopTimer) * 2, 
+                0, Math.PI * 2
+            );
+            ctx.stroke();
+        }
+
+        // パーティクル
+        particles.forEach(p => p.draw(ctx));
+    }
+
+    update();
 </script>
 </body>
 </html>
 """
 
-# HTMLを描画（高さを確保）
-components.html(html_code, height=400)
+# HTMLを埋め込む（高さはCanvasサイズ+余白）
+components.html(html_code, height=600)
 
-st.write("### 💡 体験のヒント")
-st.write(f"""
-1.  まずはそのまま**「アタック！」**ボタンを押してみてっち。
-2.  左のサイドバーで**「ヒットストップ時間」を 0** にしてみてっち。
-    * → ヌルっと通り過ぎて、すごく軽く感じるはずだっち。これが「手応えがない」状態だっち。
-3.  **「ヒットストップ時間」を 300ms** くらいに増やしてみてっち。
-    * → 「重い！」と感じるはずだっち。これが攻撃力の表現になるっち。
-4.  **「対象のみ揺らす」**のチェックを外すと、両方揺れるっち。
-    * → 動画で言っていた「自分が揺れると位置ズレして見える」問題がなんとなくわかるかもしれないっち。
-""")
+st.write("### 使い方だっち")
+st.write("1. **掴む**: 黒い石（●）をマウスでドラッグするっち。")
+st.write("2. **投げる**: ドラッグの勢いをつけて離すと飛んでいくっち！")
+st.write("3. **体験**: 白い石（○）にぶつかった瞬間、画面が一瞬止まる（ヒットストップ）のを感じてね！😊")
