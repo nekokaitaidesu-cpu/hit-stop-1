@@ -4,8 +4,8 @@ import streamlit.components.v1 as components
 # ページ設定（スマホで見やすいように広げる）
 st.set_page_config(page_title="Hit Stop Othello Mobile", layout="wide")
 
-st.title("🍄 重力オセロ：スマホ対応版")
-st.write("スマホでも指でつかんで投げられるようになったっち！📱💨")
+st.title("重力オセロ")
+st.write("指でつかんで投げられる！📱💨")
 
 # ゲームのHTML/JSコンポーネント
 html_code = """
