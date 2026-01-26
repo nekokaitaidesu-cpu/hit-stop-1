@@ -3,8 +3,8 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Hit Stop Othello: KO Edition", layout="wide")
 
-st.title("🍄 重力オセロ：KO演出＆体力ゲージ実装版")
-st.write("白丸に**HP**がついたっち！5回当てて**KO**してみて！とどめの瞬間、気持ちいいよ～！💥")
+st.title("重力オセロ")
+st.write("ヒットストップで気持ちよくなろう")
 
 html_code = """
 <!DOCTYPE html>
@@ -50,7 +50,7 @@ html_code = """
 <body>
 
 <canvas id="gameCanvas"></canvas>
-<button id="respawnBtn" onclick="respawn()">もう一回戦う！🥊</button>
+<button id="respawnBtn" onclick="respawn()">もう一回！</button>
 
 <script>
     const canvas = document.getElementById('gameCanvas');
@@ -387,7 +387,7 @@ html_code = """
 
 components.html(html_code, height=600, scrolling=False)
 
-st.write("### 遊び方だっち🍄")
+st.write("### 遊び方")
 st.write("1. 黒丸を投げつけて、白丸にぶつけてね！")
-st.write("2. 下のゲージがHPだっち。**5回**当てると…？")
-st.write("3. **KOの瞬間の「時が止まる感じ」**と**「画面の揺れ」**を楽しんでほしいっち！✨")
+st.write("2. 下のゲージがHP")
+st.write("3. 気持ちいいヒットストップを体験しよう！")
