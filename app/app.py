@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Hit Stop Othello: True Upward Sword", layout="wide")
+st.set_page_config(page_title="Hit Stop Othello: Final Weapon", layout="wide")
 
 # --- サイドバー ---
 st.sidebar.title("🍄 設定メニュー")
@@ -28,10 +28,9 @@ else:
     sword_hit_stop = st.sidebar.slider("⚔️ 斬撃の重さ (威力連動)", 0, 20, 5)
     expected_dmg = int(10 + (sword_hit_stop * 1.5))
     st.sidebar.caption(f"設定値: {sword_hit_stop}フレーム → 威力: {expected_dmg}ダメージ/1hit")
-    st.sidebar.caption("※今度こそ真上を向いたっち！")
 
-st.title("🍄 重力オセロ：真・聖剣覚醒編⚔️")
-st.write("お待たせしたっち！剣の向きを修正して、ビシッと真上を向くようにしたよ！")
+st.title("🍄 重力オセロ：ウェポンマスター完全版⚔️")
+st.write("鉄球の「慣性」と「黄色エフェクト」を完全修復！投げてよし、斬ってよしの完全版だっち！")
 
 html_template = """
 <!DOCTYPE html>
@@ -97,13 +96,11 @@ html_template = """
     const SWORD_LENGTH = 130;
     const SWORD_SWING_ANGLE = 120 * (Math.PI / 180); 
     const SWORD_SPEED = 12;
-    // ★固定の向き（真上 = -90度）
     const FIXED_UP_ANGLE = -Math.PI / 2; 
 
     let black = { 
         x: 100, y: 100, vx: 0, vy: 0, radius: 30, 
         isDragging: false, 
-        // ★初期角度を真上に設定
         angle: FIXED_UP_ANGLE, baseAngle: FIXED_UP_ANGLE, swingProgress: 0, isSwinging: false,
         hitFlags: [false, false, false], 
         targetX: 100, targetY: 100
@@ -117,7 +114,6 @@ html_template = """
         white.x = white.baseX; white.y = white.baseY;
         black.x = window.innerWidth * 0.25; black.y = window.innerHeight * 0.5;
         black.vx = 0; black.vy = 0; black.targetX = black.x; black.targetY = black.y;
-        // 初期角度も真上へ
         black.angle = FIXED_UP_ANGLE; black.baseAngle = FIXED_UP_ANGLE;
     }
     
@@ -129,6 +125,9 @@ html_template = """
     setTimeout(() => { resizeCanvas(); initPositions(); }, 100);
 
     let mouseX = 0, mouseY = 0;
+    // ★鉄球の慣性計算用
+    let lastMouseX = 0, lastMouseY = 0;
+
     let hitStopTimer = 0;
     let particles = [];
     let slashEffects = [];
@@ -207,7 +206,10 @@ html_template = """
         if (WEAPON_TYPE === 'ball') {
             const dist = Math.hypot(pos.x - black.x, pos.y - black.y);
             if (dist < black.radius * 2.5) { 
-                black.isDragging = true; black.vx = 0; black.vy = 0;
+                black.isDragging = true; 
+                black.vx = 0; black.vy = 0;
+                // ★ドラッグ開始位置を保存
+                lastMouseX = pos.x; lastMouseY = pos.y;
             }
         } else if (WEAPON_TYPE === 'sword') {
             if (!black.isSwinging) {
@@ -223,17 +225,22 @@ html_template = """
         if(e.type === 'touchmove') e.preventDefault();
         const pos = getPointerPos(e);
         mouseX = pos.x; mouseY = pos.y;
-        if (WEAPON_TYPE === 'ball' && black.isDragging) { black.x = pos.x; black.y = pos.y; }
-        else if (WEAPON_TYPE === 'sword') { black.targetX = pos.x; black.targetY = pos.y; }
+        
+        if (WEAPON_TYPE === 'ball' && black.isDragging) { 
+            black.x = pos.x; black.y = pos.y; 
+            
+            // ★速度（慣性）の計算ロジック復活！
+            // 前回のフレームとの差分を速度として蓄積
+            black.vx = (pos.x - lastMouseX) * 0.5; // 0.5は感度
+            black.vy = (pos.y - lastMouseY) * 0.5;
+            lastMouseX = pos.x;
+            lastMouseY = pos.y;
+
+        } else if (WEAPON_TYPE === 'sword') { 
+            black.targetX = pos.x; black.targetY = pos.y; 
+        }
     }
-    canvas.addEventListener('mousemove', (e) => {
-         if(black.isDragging && WEAPON_TYPE === 'ball') {
-             const rect = canvas.getBoundingClientRect();
-             const mx = e.clientX - rect.left; const my = e.clientY - rect.top;
-             black.vx = (mx - black.x) * 0.5; black.vy = (my - black.y) * 0.5;
-             black.x = mx; black.y = my;
-         }
-    });
+    
     function onUp(e) { black.isDragging = false; }
     
     canvas.addEventListener('mousedown', onDown); canvas.addEventListener('mouseup', onUp); canvas.addEventListener('mousemove', onMove);
@@ -272,18 +279,14 @@ html_template = """
             
             if (black.isSwinging) {
                 black.swingProgress += 1.0 / SWORD_SPEED;
-                // ★スイングの基準を真上(FIXED_UP_ANGLE)にする
                 const startAngle = FIXED_UP_ANGLE - SWORD_SWING_ANGLE / 2;
                 const endAngle = FIXED_UP_ANGLE + SWORD_SWING_ANGLE / 2;
                 const t = black.swingProgress;
                 const easeT = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-                // 現在の角度を計算
                 black.angle = startAngle + (endAngle - startAngle) * easeT;
-
                 if (black.swingProgress >= 1.0) { black.isSwinging = false; }
             } else {
                 black.baseAngle = FIXED_UP_ANGLE;
-                // 待機中も真上を基準に揺らす
                 black.angle = FIXED_UP_ANGLE + Math.sin(Date.now() / 400) * 0.05; 
             }
         }
@@ -317,14 +320,9 @@ html_template = """
                             let angleDiff = angleToEnemy - black.angle;
                             while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
                             while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-                            
-                            // 判定はシビアなまま (約25度)
                             if (Math.abs(angleDiff) < Math.PI / 7) {
-                                isHit = true;
-                                black.hitFlags[phase] = true;
-                                hitX = white.x; hitY = white.y;
-                                damage = 10 + (SWORD_HIT_STOP_VAL * 1.5);
-                                isCritical = true;
+                                isHit = true; black.hitFlags[phase] = true; hitX = white.x; hitY = white.y;
+                                damage = 10 + (SWORD_HIT_STOP_VAL * 1.5); isCritical = true;
                             }
                         }
                     }
@@ -390,26 +388,23 @@ html_template = """
         } else {
             ctx.save();
             ctx.translate(black.x, black.y);
-            // ★ここで回転させる★
             ctx.rotate(black.angle);
             ctx.shadowBlur = 15; ctx.shadowColor = '#00ffff'; 
             ctx.fillStyle = '#ccffff';
-            // ★描画を「右向き」基準に変更★
-            ctx.beginPath();
-            ctx.moveTo(0, -10);   // 根本 上
-            ctx.lineTo(0, 10);    // 根本 下
-            ctx.lineTo(SWORD_LENGTH, 0); // 切っ先（右）
-            ctx.fill();
-            
-            ctx.shadowBlur = 0; ctx.fillStyle = '#555'; ctx.fillRect(0, -8, 25, 16); // 持ち手
-            ctx.fillStyle = '#888'; ctx.fillRect(5, -20, 10, 40); // ガード
+            ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(0, 10); ctx.lineTo(SWORD_LENGTH, 0); ctx.fill();
+            ctx.shadowBlur = 0; ctx.fillStyle = '#555'; ctx.fillRect(0, -8, 25, 16); 
+            ctx.fillStyle = '#888'; ctx.fillRect(5, -20, 10, 40); 
             ctx.restore();
         }
 
         if (hitStopTimer > 0) {
             ctx.lineWidth = 5;
             if(isKO) { ctx.strokeStyle = `rgba(255, 50, 50, ${Math.random()})`; ctx.lineWidth = 10; } 
-            else { ctx.strokeStyle = 'rgba(0, 255, 255, 0.8)'; }
+            else { 
+                // ★エフェクトの色を武器で分ける！
+                if (WEAPON_TYPE === 'ball') ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)'; // 鉄球は黄色
+                else ctx.strokeStyle = 'rgba(0, 255, 255, 0.8)'; // 剣は水色
+            }
             let ringX = isKO ? white.x : (WEAPON_TYPE==='ball' ? (black.x + white.x)/2 : white.x);
             let ringY = isKO ? white.y : (WEAPON_TYPE==='ball' ? (black.y + white.y)/2 : white.y);
             const expansion = isKO ? (KO_HIT_STOP - hitStopTimer) : (30 - hitStopTimer) * 2;
