@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Hit Stop Othello: Tactical Shotgun", layout="wide")
+st.set_page_config(page_title="Hit Stop Othello: Shotgun Tuning", layout="wide")
 
 # --- サイドバー ---
 st.sidebar.title("🍄 設定メニュー")
@@ -12,11 +12,12 @@ weapon_mode = st.sidebar.radio(
 )
 game_mode = st.sidebar.radio("ゲームモード", ("通常バトル (Normal)", "無限サンドバッグ (Infinite) ♾️"))
 
-# パラメータ設定
+# パラメータ初期値
 sword_hit_stop = 5 
+shotgun_damage = 8 # デフォルト
 
 if game_mode == "通常バトル (Normal)":
-    start_hp = st.sidebar.slider("白丸のHP", 100, 2000, 800, step=100) 
+    start_hp = st.sidebar.slider("白丸のHP", 100, 3000, 800, step=100) 
     is_infinite_js = "false"
 else:
     start_hp = 9999
@@ -33,10 +34,15 @@ elif weapon_mode == "聖剣 (Holy Sword)":
     st.sidebar.caption(f"威力: {expected_dmg}ダメージ/1hit")
 else:
     weapon_type_js = "'shotgun'"
-    st.sidebar.success("移動可能になったショットガン！黒丸を掴んで移動、周りをクリックして発射だっち！🔫")
+    st.sidebar.markdown("---")
+    # ★ここにショットガンの威力調整を追加したよ！★
+    shotgun_damage = st.sidebar.slider("🔫 散弾1発の威力", 1, 50, 8)
+    total_dmg = shotgun_damage * 12
+    st.sidebar.caption(f"全弾命中で **{total_dmg}** ダメージだっち！")
+    st.sidebar.success("黒丸をドラッグで移動、周りをクリックで発射！")
 
-st.title("🍄 重力オセロ：タクティカル・ショットガン編🔫")
-st.write("黒丸を**ドラッグして移動**、周りを**クリックして発射**！位置取りが重要だっち！")
+st.title("🍄 重力オセロ：ショットガン調整編🔫")
+st.write("サイドバーで**ショットガンの威力**を変えられるようになったよ！最強のバランスを見つけるっち！")
 
 html_template = """
 <!DOCTYPE html>
@@ -85,6 +91,7 @@ html_template = """
     const MAX_HP = __MAX_HP__;
     const WEAPON_TYPE = __WEAPON_TYPE__;
     const SWORD_HIT_STOP_VAL = __SWORD_HIT_STOP__;
+    const SHOTGUN_DAMAGE_VAL = __SHOTGUN_DAMAGE__; // ★Pythonから受け取る値
 
     function resizeCanvas() {
         canvas.width = window.innerWidth;
@@ -101,7 +108,7 @@ html_template = """
     const FIXED_UP_ANGLE = -Math.PI / 2; 
     const SHOTGUN_PELLETS = 12; 
     const SHOTGUN_SPREAD = Math.PI / 5; 
-    const SHOTGUN_DAMAGE = 5; 
+    // const SHOTGUN_DAMAGE = 8; // ←これはもう使わない
     const SHOTGUN_SPEED = 25; 
     const SHOTGUN_COOLDOWN = 40; 
 
@@ -215,8 +222,6 @@ html_template = """
     function onDown(e) {
         if(e.type === 'touchstart') e.preventDefault();
         const pos = getPointerPos(e);
-        
-        // ★クリック位置が黒丸の上かどうか判定★
         const dist = Math.hypot(pos.x - black.x, pos.y - black.y);
         
         if (WEAPON_TYPE === 'ball') {
@@ -228,13 +233,9 @@ html_template = """
                 black.isSwinging = true; black.swingProgress = 0; black.hitFlags = [false, false, false]; black.baseAngle = FIXED_UP_ANGLE;
             }
         } else if (WEAPON_TYPE === 'shotgun') {
-            // ★ショットガンの操作分岐★
             if (dist < black.radius * 2.5) {
-                // 黒丸の上ならドラッグ（移動）開始
-                black.isDragging = true;
-                black.vx = 0; black.vy = 0;
+                black.isDragging = true; black.vx = 0; black.vy = 0;
             } else {
-                // 黒丸以外の場所なら発射！
                 if (black.cooldownTimer <= 0) {
                     black.cooldownTimer = SHOTGUN_COOLDOWN; 
                     const baseAngle = Math.atan2(pos.y - black.y, pos.x - black.x);
@@ -243,9 +244,6 @@ html_template = """
                         particles.push(new Particle(black.x + Math.cos(baseAngle)*30, black.y + Math.sin(baseAngle)*30, false, '#ffaa00'));
                     }
                     
-                    // ★空撃ち時のヒットストップ(画面揺れ)を削除したよ！★
-                    // hitStopTimer = 4; // ←削除
-
                     for (let i = 0; i < SHOTGUN_PELLETS; i++) {
                         const spread = (Math.random() - 0.5) * SHOTGUN_SPREAD;
                         pellets.push(new Pellet(black.x, black.y, baseAngle + spread));
@@ -260,11 +258,8 @@ html_template = """
         const pos = getPointerPos(e);
         mouseX = pos.x; mouseY = pos.y;
         
-        // ★ショットガンもドラッグ移動できるようにしたよ！
         if ((WEAPON_TYPE === 'ball' || WEAPON_TYPE === 'shotgun') && black.isDragging) { 
             black.x = pos.x; black.y = pos.y; 
-            
-            // 鉄球モードの時だけ慣性を計算（ショットガンは慣性不要）
             if (WEAPON_TYPE === 'ball') {
                 black.vx = (pos.x - lastMouseX) * 0.5; black.vy = (pos.y - lastMouseY) * 0.5;
                 lastMouseX = pos.x; lastMouseY = pos.y;
@@ -273,7 +268,6 @@ html_template = """
             black.targetX = pos.x; black.targetY = pos.y; 
         }
         
-        // ショットガンはドラッグ中以外はマウスの方向を向く
         if (WEAPON_TYPE === 'shotgun' && !black.isDragging) {
              black.angle = Math.atan2(mouseY - black.y, mouseX - black.x);
         }
@@ -331,9 +325,7 @@ html_template = """
                 black.baseAngle = FIXED_UP_ANGLE; black.angle = FIXED_UP_ANGLE + Math.sin(Date.now() / 400) * 0.05; 
             }
         } else if (WEAPON_TYPE === 'shotgun') {
-             // update内では特に移動計算なし（ドラッグか固定のみ）
              if (!black.isDragging) {
-                 // マウス追従
                  black.angle = Math.atan2(mouseY - black.y, mouseX - black.x);
              }
         }
@@ -361,8 +353,9 @@ html_template = """
             if (dist < white.radius + p.size) {
                 p.life = 0; 
                 hitCountInFrame++;
-                if (!IS_INFINITE) white.hp -= SHOTGUN_DAMAGE;
-                damagePopups.push(new DamagePopup(p.x, p.y - 20, SHOTGUN_DAMAGE, false));
+                // ★ダメージにスライダーの値を適用！
+                if (!IS_INFINITE) white.hp -= SHOTGUN_DAMAGE_VAL;
+                damagePopups.push(new DamagePopup(p.x, p.y - 20, SHOTGUN_DAMAGE_VAL, false));
                 for(let i=0; i<3; i++) particles.push(new Particle(p.x, p.y, false, '#ffaa00'));
 
                  if (!IS_INFINITE && white.hp <= 0 && !isKO) {
@@ -372,7 +365,7 @@ html_template = """
             }
         });
         if (hitCountInFrame > 0 && !isKO) {
-             hitStopTimer = 2; // ★ヒットした時だけ止まる！
+             hitStopTimer = 2; 
         }
     }
 
@@ -424,6 +417,7 @@ html_template = """
         }
     }
 
+
     function draw() {
         ctx.save(); ctx.translate(screenShakeX, screenShakeY);
         ctx.clearRect(-100, -100, canvas.width+200, canvas.height+200);
@@ -469,7 +463,6 @@ html_template = """
         }
 
         if (hitStopTimer > 0) {
-            // ★ショットガンの空撃ち時はhitStopTimerがセットされないので、ここはヒット時のみ通る！
             ctx.lineWidth = 5;
             if(isKO) { ctx.strokeStyle = `rgba(255, 50, 50, ${Math.random()})`; ctx.lineWidth = 10; } 
             else { 
@@ -499,6 +492,7 @@ html_template = """
 final_html_code = html_template.replace("__IS_INFINITE__", is_infinite_js) \
                                .replace("__MAX_HP__", str(start_hp)) \
                                .replace("__WEAPON_TYPE__", weapon_type_js) \
-                               .replace("__SWORD_HIT_STOP__", str(sword_hit_stop))
+                               .replace("__SWORD_HIT_STOP__", str(sword_hit_stop)) \
+                               .replace("__SHOTGUN_DAMAGE__", str(shotgun_damage))
 
 components.html(final_html_code, height=600, scrolling=False)
