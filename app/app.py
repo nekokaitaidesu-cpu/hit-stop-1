@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Hit Stop Othello: Pro Tuning", layout="wide")
+st.set_page_config(page_title="Hit Stop Othello: Fixed Sword", layout="wide")
 
 # --- サイドバー ---
 st.sidebar.title("🍄 設定メニュー")
@@ -10,7 +10,7 @@ weapon_mode = st.sidebar.radio("武器選択 ⚔️", ("鉄球 (Iron Ball)", "�
 game_mode = st.sidebar.radio("ゲームモード", ("通常バトル (Normal)", "無限サンドバッグ (Infinite) ♾️"))
 
 # パラメータ設定
-sword_hit_stop = 4 
+sword_hit_stop = 5
 
 if game_mode == "通常バトル (Normal)":
     start_hp = st.sidebar.slider("白丸のHP", 100, 999, 500, step=50)
@@ -25,16 +25,13 @@ if weapon_mode == "鉄球 (Iron Ball)":
 else:
     weapon_type_js = "'sword'"
     st.sidebar.markdown("---")
-    # ★スライダーの説明文を更新したよ★
     sword_hit_stop = st.sidebar.slider("⚔️ 斬撃の重さ (威力連動)", 0, 20, 5)
-    
-    # 予想ダメージを表示してあげる親切設計
     expected_dmg = int(10 + (sword_hit_stop * 1.5))
     st.sidebar.caption(f"設定値: {sword_hit_stop}フレーム → 威力: {expected_dmg}ダメージ/1hit")
-    st.sidebar.caption("※重くするほど威力が上がるけど、画面も長く止まるよ！")
+    st.sidebar.caption("※向きが固定されて狙いやすくなったっち！")
 
-st.title("🍄 重力オセロ：剣豪チューニング編⚔️")
-st.write("「重さ」と「威力」が連動したっち！判定もシビアになったから、しっかり狙って振るんだっち！")
+st.title("🍄 重力オセロ：質実剛健の剣⚔️")
+st.write("剣の向きを固定して、長さと当たり判定を調整したよ！見た目通りにスパッと切れる感覚を試してね！")
 
 html_template = """
 <!DOCTYPE html>
@@ -96,15 +93,17 @@ html_template = """
     const BOUNCE = 0.7;
     const KO_HIT_STOP = 120;
     
-    // ⚔️ 剣の設定
-    const SWORD_LENGTH = 160; 
+    // ⚔️ 剣の設定（調整済み）
+    const SWORD_LENGTH = 130; // ★短くした！(160->130)
     const SWORD_SWING_ANGLE = 120 * (Math.PI / 180); 
     const SWORD_SPEED = 12;
+    // ★固定の向き（真上）
+    const FIXED_UP_ANGLE = -Math.PI / 2; 
 
     let black = { 
         x: 100, y: 100, vx: 0, vy: 0, radius: 30, 
         isDragging: false, 
-        angle: 0, baseAngle: 0, swingProgress: 0, isSwinging: false,
+        angle: FIXED_UP_ANGLE, baseAngle: FIXED_UP_ANGLE, swingProgress: 0, isSwinging: false,
         hitFlags: [false, false, false], 
         targetX: 100, targetY: 100
     };
@@ -117,6 +116,8 @@ html_template = """
         white.x = white.baseX; white.y = white.baseY;
         black.x = window.innerWidth * 0.25; black.y = window.innerHeight * 0.5;
         black.vx = 0; black.vy = 0; black.targetX = black.x; black.targetY = black.y;
+        // 初期角度も真上へ
+        black.angle = FIXED_UP_ANGLE; black.baseAngle = FIXED_UP_ANGLE;
     }
     
     window.respawn = function() {
@@ -212,9 +213,8 @@ html_template = """
                 black.isSwinging = true;
                 black.swingProgress = 0;
                 black.hitFlags = [false, false, false]; 
-                const dx = pos.x - black.x;
-                const dy = pos.y - black.y;
-                black.baseAngle = Math.atan2(dy, dx);
+                // ★クリック時もマウスの方向を見ず、常に真上を基準にする
+                black.baseAngle = FIXED_UP_ANGLE;
             }
         }
     }
@@ -280,11 +280,9 @@ html_template = """
                 black.angle = black.baseAngle + currentOffset;
                 if (black.swingProgress >= 1.0) { black.isSwinging = false; }
             } else {
-                const dx = black.targetX - black.x;
-                const dy = black.targetY - black.y;
-                const idleAngle = Math.atan2(dy, dx);
-                black.baseAngle = idleAngle;
-                black.angle = idleAngle + Math.sin(Date.now() / 400) * 0.1; 
+                // ★マウス追従をやめて、常に真上を基準に揺らす
+                black.baseAngle = FIXED_UP_ANGLE;
+                black.angle = FIXED_UP_ANGLE + Math.sin(Date.now() / 400) * 0.05; 
             }
         }
 
@@ -318,18 +316,13 @@ html_template = """
                             while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
                             while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
                             
-                            // ★判定をシビアに変更！★
-                            // Math.PI/3(60度) → Math.PI/10(18度)
-                            // 剣が重なってる時じゃないと当たらない！
-                            if (Math.abs(angleDiff) < Math.PI / 10) {
+                            // ★判定を少し広げた！(PI/10 -> PI/7, 約25度)★
+                            // 見た目と判定のズレを解消
+                            if (Math.abs(angleDiff) < Math.PI / 7) {
                                 isHit = true;
                                 black.hitFlags[phase] = true;
                                 hitX = white.x; hitY = white.y;
-                                
-                                // ★威力連動ロジック★
-                                // 0f=10dmg, 20f=40dmg
                                 damage = 10 + (SWORD_HIT_STOP_VAL * 1.5);
-                                
                                 isCritical = true;
                             }
                         }
@@ -399,6 +392,7 @@ html_template = """
             ctx.rotate(black.angle);
             ctx.shadowBlur = 15; ctx.shadowColor = '#00ffff'; 
             ctx.fillStyle = '#ccffff';
+            // 剣の描画はそのまま
             ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(10, 0); ctx.lineTo(0, -SWORD_LENGTH); ctx.fill();
             ctx.shadowBlur = 0; ctx.fillStyle = '#555'; ctx.fillRect(-8, 0, 16, 25);
             ctx.fillStyle = '#888'; ctx.fillRect(-20, -5, 40, 10);
