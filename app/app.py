@@ -101,7 +101,7 @@ html_template = """
     const FIXED_UP_ANGLE = -Math.PI / 2; 
     const SHOTGUN_PELLETS = 12; 
     const SHOTGUN_SPREAD = Math.PI / 5; 
-    const SHOTGUN_DAMAGE = 6; 
+    const SHOTGUN_DAMAGE = 5; 
     const SHOTGUN_SPEED = 25; 
     const SHOTGUN_COOLDOWN = 40; 
 
