@@ -1,26 +1,34 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Hit Stop Othello: Combo Rush", layout="wide")
+st.set_page_config(page_title="Hit Stop Othello: Infinite Sandbox", layout="wide")
 
 # --- サイドバー設定 ---
 st.sidebar.title("🍄 設定メニュー")
+st.sidebar.write("ここでゲームモードを変えられるっち！")
 
 game_mode = st.sidebar.radio(
     "モード選択",
     ("通常バトル (Normal)", "無限サンドバッグ (Infinite) ♾️")
 )
 
+# モード設定
 if game_mode == "通常バトル (Normal)":
-    start_hp = st.sidebar.slider("白丸のHP", 100, 999, 100, step=50)
+    start_hp = st.sidebar.slider("白丸のHP (体力)", 100, 999, 100, step=50)
+    # JSに渡すときは文字列の "false" にする
     is_infinite_js = "false"
+    st.sidebar.success(f"今の設定：HP {start_hp} で勝負だっち！")
 else:
     start_hp = 9999
+    # JSに渡すときは文字列の "true" にする
     is_infinite_js = "true"
+    st.sidebar.info("いくら殴っても倒れないっち！練習し放題！")
 
-st.title("🍄 重力オセロ：コンボ＆フラッシュ演出💥")
-st.write("地面に落とさず連続で当てて、**コンボ**を稼ぐっち！クリティカルで画面が光るよ！⚡️")
+st.title("🍄 重力オセロ：HP調整＆無限モード実装！")
+st.write("左のメニューで**HP**や**モード**を変更できるよ！無限モードで最強のスマッシュを練習するっち！💪")
 
+# ゲームのHTML/JSコンポーネント
+# f-stringを使わず、後で .replace() で書き換える方式にするよ（こっちの方が安全！）
 html_template = """
 <!DOCTYPE html>
 <html>
@@ -63,7 +71,7 @@ html_template = """
     const ctx = canvas.getContext('2d');
     const respawnBtn = document.getElementById('respawnBtn');
 
-    // Python変数の埋め込み
+    // ★ここにPythonの変数を埋め込むよ★
     const IS_INFINITE = __IS_INFINITE__;
     const MAX_HP = __MAX_HP__;
 
@@ -79,14 +87,9 @@ html_template = """
     const BOUNCE = 0.7;
     const KO_HIT_STOP = 120;
 
-    let black = { x: 100, y: 100, vx: 0, vy: 0, radius: 30, isDragging: false };
+    let black = { x: 100, y: 100, vx: 0, vy: 0, radius: 30, isDragging: false, color: 'black' };
     let white = { x: 0, y: 0, baseX: 0, baseY: 0, radius: 30, hp: MAX_HP, visible: true };
     let isKO = false;
-
-    // コンボ関連変数
-    let combo = 0;
-    let comboTimer = 0;     // コンボ受付時間
-    let flashTimer = 0;     // 背景フラッシュ用
 
     function initPositions() {
         white.baseX = window.innerWidth * 0.75;
@@ -95,7 +98,6 @@ html_template = """
         black.x = window.innerWidth * 0.25;
         black.y = window.innerHeight * 0.5;
         black.vx = 0; black.vy = 0;
-        combo = 0; comboTimer = 0;
     }
     
     window.respawn = function() {
@@ -192,15 +194,6 @@ html_template = """
     canvas.addEventListener('touchstart', onDown, {passive: false}); canvas.addEventListener('touchmove', onMove, {passive: false}); canvas.addEventListener('touchend', onUp);
 
     function update() {
-        // 背景フラッシュの減衰
-        if (flashTimer > 0) flashTimer--;
-
-        // コンボタイマー減衰（0になったらコンボ終了）
-        if (comboTimer > 0) {
-            comboTimer--;
-            if (comboTimer <= 0) combo = 0;
-        }
-
         if (hitStopTimer > 0) {
             hitStopTimer--;
             if (isKO || hitStopTimer > 5) {
@@ -244,16 +237,12 @@ html_template = """
                 
                 if (damage > 30) isCritical = true;
 
-                if (!IS_INFINITE) { white.hp -= damage; }
+                // --- ダメージ処理 ---
+                if (!IS_INFINITE) {
+                    white.hp -= damage;
+                }
                 
                 damagePopups.push(new DamagePopup(white.x, white.y - 40, damage, isCritical));
-
-                // --- コンボ加算！ ---
-                combo++;
-                comboTimer = 120; // 2秒以内に次の攻撃を当てろ！
-
-                // --- フラッシュ演出！ ---
-                if (isCritical) flashTimer = 5; // 5フレーム光る
 
                 let stopTime = Math.floor(damage / 2.5); 
                 if (stopTime < 5) stopTime = 5;
@@ -287,45 +276,28 @@ html_template = """
     function draw() {
         ctx.save();
         ctx.translate(screenShakeX, screenShakeY);
-        
-        // --- 背景描画 ---
-        // フラッシュ中は背景を白くする！
-        if (flashTimer > 0) {
-            ctx.fillStyle = '#ffffff'; // フラッシュ！
-            ctx.fillRect(-100, -100, canvas.width+200, canvas.height+200);
-        } else {
-            ctx.clearRect(-100, -100, canvas.width+200, canvas.height+200);
-            ctx.strokeStyle = '#444'; ctx.lineWidth = 1;
-            for(let i=0; i<canvas.width; i+=80) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i, canvas.height); ctx.stroke(); }
-            for(let i=0; i<canvas.height; i+=80) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(canvas.width, i); ctx.stroke(); }
-        }
+        ctx.clearRect(-100, -100, canvas.width+200, canvas.height+200);
 
-        // --- コンボ文字の描画（背景に大きく） ---
-        if (combo > 1) {
-            ctx.save();
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)'; // 薄く表示
-            ctx.font = 'bold 150px Arial Black';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            // 少し揺らす
-            const shake = Math.random() * 5;
-            ctx.fillText(combo + " HIT!", canvas.width/2 + shake, canvas.height/2);
-            ctx.restore();
-        }
+        ctx.strokeStyle = '#444'; ctx.lineWidth = 1;
+        for(let i=0; i<canvas.width; i+=80) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i, canvas.height); ctx.stroke(); }
+        for(let i=0; i<canvas.height; i+=80) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(canvas.width, i); ctx.stroke(); }
 
         if (white.visible) {
             ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(white.x, white.y, white.radius, 0, Math.PI * 2); ctx.fill();
             ctx.strokeStyle = '#ccc'; ctx.lineWidth = 2; ctx.stroke();
 
-            // HPバー
+            // --- HPバー ---
             const barWidth = 80; const barHeight = 8;
             const barX = white.x - barWidth / 2;
             const barY = white.y + white.radius + 15;
             ctx.fillStyle = '#555'; ctx.fillRect(barX, barY, barWidth, barHeight);
             
             if (IS_INFINITE) {
-                ctx.fillStyle = '#00ffff'; ctx.fillRect(barX, barY, barWidth, barHeight);
-                ctx.fillStyle = '#fff'; ctx.font = '12px Arial'; ctx.textAlign = 'center'; ctx.fillText("∞", white.x, barY + 9);
+                // 無限モード
+                ctx.fillStyle = '#00ffff';
+                ctx.fillRect(barX, barY, barWidth, barHeight);
+                ctx.fillStyle = '#fff'; ctx.font = '12px Arial'; ctx.textAlign = 'center';
+                ctx.fillText("∞", white.x, barY + 9);
             } else {
                 const hpPercent = white.hp / MAX_HP;
                 ctx.fillStyle = hpPercent > 0.5 ? '#00ff00' : (hpPercent > 0.2 ? '#ffff00' : '#ff0000');
@@ -357,5 +329,7 @@ html_template = """
 </html>
 """
 
+# ここで文字を置き換える（安全な方法！）
 final_html_code = html_template.replace("__IS_INFINITE__", is_infinite_js).replace("__MAX_HP__", str(start_hp))
+
 components.html(final_html_code, height=600, scrolling=False)
