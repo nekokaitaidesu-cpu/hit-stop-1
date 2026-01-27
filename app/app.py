@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Hit Stop Othello: Shotgun Tuning", layout="wide")
+st.set_page_config(page_title="Hit Stop Othello: Balanced Shotgun", layout="wide")
 
 # --- サイドバー ---
 st.sidebar.title("🍄 設定メニュー")
@@ -14,10 +14,10 @@ game_mode = st.sidebar.radio("ゲームモード", ("通常バトル (Normal)", 
 
 # パラメータ初期値
 sword_hit_stop = 5 
-shotgun_damage = 8 # デフォルト
+shotgun_damage = 8 
 
 if game_mode == "通常バトル (Normal)":
-    start_hp = st.sidebar.slider("白丸のHP", 100, 3000, 800, step=100) 
+    start_hp = st.sidebar.slider("白丸のHP", 100, 3000, 1000, step=100) 
     is_infinite_js = "false"
 else:
     start_hp = 9999
@@ -35,14 +35,22 @@ elif weapon_mode == "聖剣 (Holy Sword)":
 else:
     weapon_type_js = "'shotgun'"
     st.sidebar.markdown("---")
-    # ★ここにショットガンの威力調整を追加したよ！★
-    shotgun_damage = st.sidebar.slider("🔫 散弾1発の威力", 1, 50, 8)
+    # ★最大値を20に制限したよ！★
+    shotgun_damage = st.sidebar.slider("🔫 散弾1発の威力", 1, 20, 8)
+    
+    # 手応えプレビューを表示
+    hit_feel = "普通 (Normal)"
+    if shotgun_damage < 8: hit_feel = "軽い (Light) 🍃"
+    elif shotgun_damage >= 18: hit_feel = "激重 (Heavy!!) 💥"
+    elif shotgun_damage >= 14: hit_feel = "重い (Heavy) 🔥"
+    elif shotgun_damage >= 10: hit_feel = "強め (Strong) 💪"
+    
     total_dmg = shotgun_damage * 12
-    st.sidebar.caption(f"全弾命中で **{total_dmg}** ダメージだっち！")
-    st.sidebar.success("黒丸をドラッグで移動、周りをクリックで発射！")
+    st.sidebar.caption(f"全弾威力: **{total_dmg}** / 手応え: **{hit_feel}**")
+    st.sidebar.success("移動：ドラッグ / 発射：クリック")
 
-st.title("🍄 重力オセロ：ショットガン調整編🔫")
-st.write("サイドバーで**ショットガンの威力**を変えられるようになったよ！最強のバランスを見つけるっち！")
+st.title("🍄 重力オセロ：バランス調整パッチ適用🛠️")
+st.write("ショットガンの威力を最大20に制限！その代わり、威力を上げると**ヒットストップ（手応え）**が重くなるよ！")
 
 html_template = """
 <!DOCTYPE html>
@@ -91,7 +99,7 @@ html_template = """
     const MAX_HP = __MAX_HP__;
     const WEAPON_TYPE = __WEAPON_TYPE__;
     const SWORD_HIT_STOP_VAL = __SWORD_HIT_STOP__;
-    const SHOTGUN_DAMAGE_VAL = __SHOTGUN_DAMAGE__; // ★Pythonから受け取る値
+    const SHOTGUN_DAMAGE_VAL = __SHOTGUN_DAMAGE__;
 
     function resizeCanvas() {
         canvas.width = window.innerWidth;
@@ -108,7 +116,6 @@ html_template = """
     const FIXED_UP_ANGLE = -Math.PI / 2; 
     const SHOTGUN_PELLETS = 12; 
     const SHOTGUN_SPREAD = Math.PI / 5; 
-    // const SHOTGUN_DAMAGE = 8; // ←これはもう使わない
     const SHOTGUN_SPEED = 25; 
     const SHOTGUN_COOLDOWN = 40; 
 
@@ -353,7 +360,6 @@ html_template = """
             if (dist < white.radius + p.size) {
                 p.life = 0; 
                 hitCountInFrame++;
-                // ★ダメージにスライダーの値を適用！
                 if (!IS_INFINITE) white.hp -= SHOTGUN_DAMAGE_VAL;
                 damagePopups.push(new DamagePopup(p.x, p.y - 20, SHOTGUN_DAMAGE_VAL, false));
                 for(let i=0; i<3; i++) particles.push(new Particle(p.x, p.y, false, '#ffaa00'));
@@ -364,8 +370,16 @@ html_template = """
                 }
             }
         });
+        
+        // ★ヒットストップの長さを威力に応じて可変にするよ！
         if (hitCountInFrame > 0 && !isKO) {
-             hitStopTimer = 2; 
+             let stop = 2; // デフォルト(威力8,9)
+             if (SHOTGUN_DAMAGE_VAL < 8) stop = 1; // 軽い
+             else if (SHOTGUN_DAMAGE_VAL >= 18) stop = 5; // 激重
+             else if (SHOTGUN_DAMAGE_VAL >= 14) stop = 4; // 重い
+             else if (SHOTGUN_DAMAGE_VAL >= 10) stop = 3; // ちょっと重い
+             
+             hitStopTimer = stop; 
         }
     }
 
@@ -416,7 +430,6 @@ html_template = """
             }
         }
     }
-
 
     function draw() {
         ctx.save(); ctx.translate(screenShakeX, screenShakeY);
