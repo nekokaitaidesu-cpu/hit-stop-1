@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Hit Stop Othello: Custom Feel", layout="wide")
+st.set_page_config(page_title="Hit Stop Othello: Pro Tuning", layout="wide")
 
 # --- サイドバー ---
 st.sidebar.title("🍄 設定メニュー")
@@ -10,7 +10,7 @@ weapon_mode = st.sidebar.radio("武器選択 ⚔️", ("鉄球 (Iron Ball)", "�
 game_mode = st.sidebar.radio("ゲームモード", ("通常バトル (Normal)", "無限サンドバッグ (Infinite) ♾️"))
 
 # パラメータ設定
-sword_hit_stop = 4 # デフォルト
+sword_hit_stop = 4 
 
 if game_mode == "通常バトル (Normal)":
     start_hp = st.sidebar.slider("白丸のHP", 100, 999, 500, step=50)
@@ -24,13 +24,17 @@ if weapon_mode == "鉄球 (Iron Ball)":
     st.sidebar.info("重力を活かして投げつける「重量級」武器だっち！")
 else:
     weapon_type_js = "'sword'"
-    # ★ここに調整バーを追加したよ！★
     st.sidebar.markdown("---")
-    sword_hit_stop = st.sidebar.slider("⚔️ 斬撃の手応え (フレーム数)", 0, 20, 4)
-    st.sidebar.caption("0=抵抗なし(スッ) / 20=激重(ズガッ)")
+    # ★スライダーの説明文を更新したよ★
+    sword_hit_stop = st.sidebar.slider("⚔️ 斬撃の重さ (威力連動)", 0, 20, 5)
+    
+    # 予想ダメージを表示してあげる親切設計
+    expected_dmg = int(10 + (sword_hit_stop * 1.5))
+    st.sidebar.caption(f"設定値: {sword_hit_stop}フレーム → 威力: {expected_dmg}ダメージ/1hit")
+    st.sidebar.caption("※重くするほど威力が上がるけど、画面も長く止まるよ！")
 
-st.title("🍄 重力オセロ：手応えカスタム編🔧")
-st.write("サイドバーの**「斬撃の手応え」**スライダーを動かして、自分好みの「切り心地」を探求するっち！")
+st.title("🍄 重力オセロ：剣豪チューニング編⚔️")
+st.write("「重さ」と「威力」が連動したっち！判定もシビアになったから、しっかり狙って振るんだっち！")
 
 html_template = """
 <!DOCTYPE html>
@@ -78,7 +82,7 @@ html_template = """
     const IS_INFINITE = __IS_INFINITE__;
     const MAX_HP = __MAX_HP__;
     const WEAPON_TYPE = __WEAPON_TYPE__;
-    const SWORD_HIT_STOP_VAL = __SWORD_HIT_STOP__; // ★Pythonから受け取る値
+    const SWORD_HIT_STOP_VAL = __SWORD_HIT_STOP__;
 
     function resizeCanvas() {
         canvas.width = window.innerWidth;
@@ -313,11 +317,20 @@ html_template = """
                             let angleDiff = angleToEnemy - black.angle;
                             while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
                             while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-                            if (Math.abs(angleDiff) < Math.PI / 3) {
+                            
+                            // ★判定をシビアに変更！★
+                            // Math.PI/3(60度) → Math.PI/10(18度)
+                            // 剣が重なってる時じゃないと当たらない！
+                            if (Math.abs(angleDiff) < Math.PI / 10) {
                                 isHit = true;
                                 black.hitFlags[phase] = true;
                                 hitX = white.x; hitY = white.y;
-                                damage = 15; isCritical = true;
+                                
+                                // ★威力連動ロジック★
+                                // 0f=10dmg, 20f=40dmg
+                                damage = 10 + (SWORD_HIT_STOP_VAL * 1.5);
+                                
+                                isCritical = true;
                             }
                         }
                     }
@@ -336,9 +349,8 @@ html_template = """
                     isKO = true; white.hp = 0; hitStopTimer = KO_HIT_STOP;
                     for(let i=0; i<80; i++) particles.push(new Particle(white.x, white.y, true));
                 } else {
-                    // ★ ここで設定値を使う！ ★
                     hitStopTimer = WEAPON_TYPE === 'sword' ? SWORD_HIT_STOP_VAL : Math.floor(damage / 2); 
-                    if (hitStopTimer < 3 && WEAPON_TYPE === 'ball') hitStopTimer = 3; // 鉄球の最低保証
+                    if (hitStopTimer < 3 && WEAPON_TYPE === 'ball') hitStopTimer = 3; 
                     const pCount = Math.floor(damage / 3) + 3;
                     for(let i=0; i<pCount; i++) {
                         particles.push(new Particle(hitX, hitY, false, isCritical ? '#00ffff' : '#FFD700'));
