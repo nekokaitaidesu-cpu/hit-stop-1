@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Hit Stop Othello: Fixed Sword", layout="wide")
+st.set_page_config(page_title="Hit Stop Othello: True Upward Sword", layout="wide")
 
 # --- サイドバー ---
 st.sidebar.title("🍄 設定メニュー")
@@ -28,10 +28,10 @@ else:
     sword_hit_stop = st.sidebar.slider("⚔️ 斬撃の重さ (威力連動)", 0, 20, 5)
     expected_dmg = int(10 + (sword_hit_stop * 1.5))
     st.sidebar.caption(f"設定値: {sword_hit_stop}フレーム → 威力: {expected_dmg}ダメージ/1hit")
-    st.sidebar.caption("※向きが固定されて狙いやすくなったっち！")
+    st.sidebar.caption("※今度こそ真上を向いたっち！")
 
-st.title("🍄 重力オセロ：質実剛健の剣⚔️")
-st.write("剣の向きを固定して、長さと当たり判定を調整したよ！見た目通りにスパッと切れる感覚を試してね！")
+st.title("🍄 重力オセロ：真・聖剣覚醒編⚔️")
+st.write("お待たせしたっち！剣の向きを修正して、ビシッと真上を向くようにしたよ！")
 
 html_template = """
 <!DOCTYPE html>
@@ -93,16 +93,17 @@ html_template = """
     const BOUNCE = 0.7;
     const KO_HIT_STOP = 120;
     
-    // ⚔️ 剣の設定（調整済み）
-    const SWORD_LENGTH = 130; // ★短くした！(160->130)
+    // ⚔️ 剣の設定
+    const SWORD_LENGTH = 130;
     const SWORD_SWING_ANGLE = 120 * (Math.PI / 180); 
     const SWORD_SPEED = 12;
-    // ★固定の向き（真上）
+    // ★固定の向き（真上 = -90度）
     const FIXED_UP_ANGLE = -Math.PI / 2; 
 
     let black = { 
         x: 100, y: 100, vx: 0, vy: 0, radius: 30, 
         isDragging: false, 
+        // ★初期角度を真上に設定
         angle: FIXED_UP_ANGLE, baseAngle: FIXED_UP_ANGLE, swingProgress: 0, isSwinging: false,
         hitFlags: [false, false, false], 
         targetX: 100, targetY: 100
@@ -213,7 +214,6 @@ html_template = """
                 black.isSwinging = true;
                 black.swingProgress = 0;
                 black.hitFlags = [false, false, false]; 
-                // ★クリック時もマウスの方向を見ず、常に真上を基準にする
                 black.baseAngle = FIXED_UP_ANGLE;
             }
         }
@@ -272,16 +272,18 @@ html_template = """
             
             if (black.isSwinging) {
                 black.swingProgress += 1.0 / SWORD_SPEED;
-                const startAngle = -SWORD_SWING_ANGLE / 2;
-                const endAngle = SWORD_SWING_ANGLE / 2;
+                // ★スイングの基準を真上(FIXED_UP_ANGLE)にする
+                const startAngle = FIXED_UP_ANGLE - SWORD_SWING_ANGLE / 2;
+                const endAngle = FIXED_UP_ANGLE + SWORD_SWING_ANGLE / 2;
                 const t = black.swingProgress;
                 const easeT = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-                const currentOffset = startAngle + (endAngle - startAngle) * easeT;
-                black.angle = black.baseAngle + currentOffset;
+                // 現在の角度を計算
+                black.angle = startAngle + (endAngle - startAngle) * easeT;
+
                 if (black.swingProgress >= 1.0) { black.isSwinging = false; }
             } else {
-                // ★マウス追従をやめて、常に真上を基準に揺らす
                 black.baseAngle = FIXED_UP_ANGLE;
+                // 待機中も真上を基準に揺らす
                 black.angle = FIXED_UP_ANGLE + Math.sin(Date.now() / 400) * 0.05; 
             }
         }
@@ -316,8 +318,7 @@ html_template = """
                             while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
                             while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
                             
-                            // ★判定を少し広げた！(PI/10 -> PI/7, 約25度)★
-                            // 見た目と判定のズレを解消
+                            // 判定はシビアなまま (約25度)
                             if (Math.abs(angleDiff) < Math.PI / 7) {
                                 isHit = true;
                                 black.hitFlags[phase] = true;
@@ -389,13 +390,19 @@ html_template = """
         } else {
             ctx.save();
             ctx.translate(black.x, black.y);
+            // ★ここで回転させる★
             ctx.rotate(black.angle);
             ctx.shadowBlur = 15; ctx.shadowColor = '#00ffff'; 
             ctx.fillStyle = '#ccffff';
-            // 剣の描画はそのまま
-            ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(10, 0); ctx.lineTo(0, -SWORD_LENGTH); ctx.fill();
-            ctx.shadowBlur = 0; ctx.fillStyle = '#555'; ctx.fillRect(-8, 0, 16, 25);
-            ctx.fillStyle = '#888'; ctx.fillRect(-20, -5, 40, 10);
+            // ★描画を「右向き」基準に変更★
+            ctx.beginPath();
+            ctx.moveTo(0, -10);   // 根本 上
+            ctx.lineTo(0, 10);    // 根本 下
+            ctx.lineTo(SWORD_LENGTH, 0); // 切っ先（右）
+            ctx.fill();
+            
+            ctx.shadowBlur = 0; ctx.fillStyle = '#555'; ctx.fillRect(0, -8, 25, 16); // 持ち手
+            ctx.fillStyle = '#888'; ctx.fillRect(5, -20, 10, 40); // ガード
             ctx.restore();
         }
 
