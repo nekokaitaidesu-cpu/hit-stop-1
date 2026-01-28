@@ -1,14 +1,13 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Hit Stop Othello: Laser Gun", layout="wide")
+st.set_page_config(page_title="Hit Stop Othello: Laser Beam", layout="wide")
 
 # --- サイドバー ---
 st.sidebar.title("🍄 設定メニュー")
 
 weapon_mode = st.sidebar.radio(
     "武器選択 ⚔️",
-    # 選択肢にレーザーガンを追加！
     ("鉄球 (Iron Ball)", "聖剣 (Holy Sword)", "ショットガン (Shotgun) 🔫", "レーザーガン (Laser Gun) ⚡")
 )
 game_mode = st.sidebar.radio("ゲームモード", ("通常バトル (Normal)", "無限サンドバッグ (Infinite) ♾️"))
@@ -16,7 +15,7 @@ game_mode = st.sidebar.radio("ゲームモード", ("通常バトル (Normal)", 
 # パラメータ初期値
 sword_hit_stop = 5 
 shotgun_damage = 8
-laser_damage = 25 # レーザーのデフォルト威力
+laser_damage = 25 
 
 if game_mode == "通常バトル (Normal)":
     start_hp = st.sidebar.slider("白丸のHP", 100, 5000, 2000, step=100) 
@@ -40,14 +39,13 @@ elif weapon_mode == "ショットガン (Shotgun) 🔫":
     shotgun_damage = st.sidebar.slider("🔫 散弾1発の威力", 1, 20, 8)
     st.sidebar.caption(f"全弾威力: {shotgun_damage * 12}")
 else:
-    # レーザーガンの設定
     weapon_type_js = "'laser'"
     st.sidebar.markdown("---")
     laser_damage = st.sidebar.slider("⚡ レーザー威力(1本あたり)", 10, 100, 25)
-    st.sidebar.success("壁に当たると3方向に反射！即着弾の光学兵器だっち！⚡")
+    st.sidebar.success("長さ160pxのビームが飛ぶ！壁反射で広がる光学兵器だっち！⚡")
 
-st.title("🍄 重力オセロ：レーザーガン実装！⚡")
-st.write("新武器**「レーザーガン」**！クリックした瞬間に壁まで届き、さらに3方向に反射拡散する超兵器だっち！")
+st.title("🍄 重力オセロ：プロジェクタイル・レーザー⚡")
+st.write("レーザーが**「飛んでいくビーム」**に進化したよ！壁に当たって拡散する様子を目撃するっち！")
 
 html_template = """
 <!DOCTYPE html>
@@ -97,7 +95,7 @@ html_template = """
     const WEAPON_TYPE = __WEAPON_TYPE__;
     const SWORD_HIT_STOP_VAL = __SWORD_HIT_STOP__;
     const SHOTGUN_DAMAGE_VAL = __SHOTGUN_DAMAGE__;
-    const LASER_DAMAGE_VAL = __LASER_DAMAGE__; // ★新しいパラメータ
+    const LASER_DAMAGE_VAL = __LASER_DAMAGE__;
 
     function resizeCanvas() {
         canvas.width = window.innerWidth;
@@ -113,9 +111,11 @@ html_template = """
     const SWORD_LENGTH = 130; const SWORD_SWING_ANGLE = 120 * (Math.PI / 180); const SWORD_SPEED = 12;
     const FIXED_UP_ANGLE = -Math.PI / 2; 
     const SHOTGUN_PELLETS = 12; const SHOTGUN_SPREAD = Math.PI / 5; const SHOTGUN_SPEED = 25; const SHOTGUN_COOLDOWN = 40; 
-    // ⚡レーザー設定
+    // ⚡レーザー設定（ビーム版）
     const LASER_COOLDOWN = 30;
-    const LASER_SPREAD = Math.PI / 6; // 反射時の拡散角度(30度)
+    const LASER_SPEED = 45; // ビームの速度（速い！）
+    const LASER_LENGTH = 160; // ビームの長さ（2マス分）
+    const LASER_SPREAD = Math.PI / 6; // 反射拡散角度(30度)
 
     let black = { 
         x: 100, y: 100, vx: 0, vy: 0, radius: 30, 
@@ -151,10 +151,9 @@ html_template = """
     let slashEffects = [];
     let damagePopups = [];
     let pellets = []; 
-    let laserBeams = []; // ⚡レーザー描画用配列
+    let laserBolts = []; // ⚡飛行するビーム用配列
     let screenShakeX = 0, screenShakeY = 0;
 
-    // --- クラス定義 ---
     class Particle {
         constructor(x, y, isBig, colorOverride) {
             this.x = x; this.y = y;
@@ -199,6 +198,79 @@ html_template = """
         }
     }
 
+    // ⚡飛行するレーザーボルトクラス
+    class LaserBolt {
+        constructor(x, y, angle, generation) {
+            this.x = x; this.y = y;
+            this.angle = angle;
+            this.vx = Math.cos(angle) * LASER_SPEED;
+            this.vy = Math.sin(angle) * LASER_SPEED;
+            this.generation = generation; // 0=初期, 1=反射
+            this.life = 100; // 画面外に出るまでの寿命
+            this.active = true;
+        }
+        update() {
+            // 移動後の位置を計算
+            let nextX = this.x + this.vx;
+            let nextY = this.y + this.vy;
+            let hitWall = false;
+            let wallNormal = 0; // 反射用
+
+            // 壁判定（簡易バウンド）
+            if (nextX > canvas.width) { nextX = canvas.width; hitWall = true; wallNormal = Math.PI; }
+            else if (nextX < 0) { nextX = 0; hitWall = true; wallNormal = 0; }
+            
+            if (nextY > canvas.height) { nextY = canvas.height; hitWall = true; wallNormal = -Math.PI/2; }
+            else if (nextY < 0) { nextY = 0; hitWall = true; wallNormal = Math.PI/2; }
+
+            if (hitWall) {
+                this.active = false; // 今の弾は消える
+                
+                // 1回だけ分裂反射する
+                if (this.generation < 1) {
+                    // 反射角の計算 (入射角の鏡面反射)
+                    // 簡易的に、壁が垂直か水平かで判定
+                    let reflectAngle = this.angle;
+                    if (wallNormal === 0 || wallNormal === Math.PI) { // 左右の壁
+                        reflectAngle = Math.PI - this.angle;
+                    } else { // 上下の壁
+                        reflectAngle = -this.angle;
+                    }
+
+                    // 3方向に分裂発射！
+                    spawnLaser(nextX, nextY, reflectAngle, this.generation + 1); // 中央
+                    spawnLaser(nextX, nextY, reflectAngle + LASER_SPREAD, this.generation + 1); // +30度
+                    spawnLaser(nextX, nextY, reflectAngle - LASER_SPREAD, this.generation + 1); // -30度
+                    
+                    // 壁衝突エフェクト
+                    for(let i=0; i<5; i++) particles.push(new Particle(nextX, nextY, false, '#00ffff'));
+                }
+            } else {
+                this.x = nextX;
+                this.y = nextY;
+            }
+            
+            this.life--;
+            if(this.life <= 0) this.active = false;
+        }
+        draw(ctx) {
+            // ビームの描画（残像のように後ろに伸ばす）
+            ctx.save();
+            ctx.shadowBlur = 15; ctx.shadowColor = '#00ffff';
+            ctx.strokeStyle = '#ccffff'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            // 進行方向と逆向きに線を引く
+            ctx.lineTo(this.x - Math.cos(this.angle)*LASER_LENGTH, this.y - Math.sin(this.angle)*LASER_LENGTH);
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+
+    function spawnLaser(x, y, angle, generation) {
+        laserBolts.push(new LaserBolt(x, y, angle, generation));
+    }
+
     class DamagePopup {
         constructor(x, y, damage, isCritical) {
             this.x = x; this.y = y; this.damage = Math.floor(damage);
@@ -221,94 +293,6 @@ html_template = """
         return { x: cx - rect.left, y: cy - rect.top };
     }
 
-    // ⚡レーザー発射関数（再帰的に反射を計算）
-    function fireLaser(startX, startY, angle, generation) {
-        if (generation > 1) return; // 反射は1回（最初の発射+3反射）まで
-
-        let endX = startX + Math.cos(angle) * 2000; // 画面外まで飛ばす
-        let endY = startY + Math.sin(angle) * 2000;
-        let hitWallStr = "";
-
-        // 壁との交差判定（簡易版）
-        // 右壁
-        if (endX > canvas.width) {
-            endX = canvas.width;
-            endY = startY + Math.tan(angle) * (canvas.width - startX);
-            hitWallStr = "vertical";
-        } else if (endX < 0) { // 左壁
-            endX = 0;
-            endY = startY + Math.tan(angle) * (0 - startX);
-            hitWallStr = "vertical";
-        }
-        
-        // 下壁（交差点を再計算）
-        if (endY > canvas.height) {
-             const tempX = startX + (canvas.height - startY) / Math.tan(angle);
-             // 既に計算したXより手前なら更新
-             if (angle > 0 && angle < Math.PI) { // 下向きの時のみ
-                 if (tempX >= 0 && tempX <= canvas.width) {
-                    endY = canvas.height;
-                    endX = tempX;
-                    hitWallStr = "horizontal";
-                 }
-             }
-        } else if (endY < 0) { // 上壁
-             const tempX = startX + (0 - startY) / Math.tan(angle);
-             if (angle > Math.PI || angle < 0) { // 上向きの時のみ
-                 if (tempX >= 0 && tempX <= canvas.width) {
-                    endY = 0;
-                    endX = tempX;
-                    hitWallStr = "horizontal";
-                 }
-             }
-        }
-
-        // 描画用に保存
-        laserBeams.push({x1: startX, y1: startY, x2: endX, y2: endY});
-
-        // レーザーの線分と白丸の当たり判定
-        if (white.visible && !isKO) {
-            checkLaserCollision(startX, startY, endX, endY);
-        }
-
-        // 壁に当たったら3方向に反射
-        if (hitWallStr !== "" && generation === 0) {
-            let reflectAngle = angle;
-            if (hitWallStr === "vertical") {
-                reflectAngle = Math.PI - angle;
-            } else if (hitWallStr === "horizontal") {
-                reflectAngle = -angle;
-            }
-            
-            // 3方向に再帰発射！
-            fireLaser(endX, endY, reflectAngle, generation + 1); // メイン反射
-            fireLaser(endX, endY, reflectAngle + LASER_SPREAD, generation + 1); // +30度
-            fireLaser(endX, endY, reflectAngle - LASER_SPREAD, generation + 1); // -30度
-        }
-    }
-
-    // 線分と円の当たり判定（ヘルパー関数）
-    function distToSegmentSquared(p, v, w) {
-        const l2 = (v.x - w.x)**2 + (v.y - w.y)**2;
-        if (l2 === 0) return (p.x - v.x)**2 + (p.y - v.y)**2;
-        let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
-        t = Math.max(0, Math.min(1, t));
-        return (p.x - v.x - t * (w.x - v.x))**2 + (p.y - v.y - t * (w.y - v.y))**2;
-    }
-
-    function checkLaserCollision(x1, y1, x2, y2) {
-        const distSq = distToSegmentSquared(
-            {x: white.x, y: white.y}, 
-            {x: x1, y: x1}, {x: x2, y: y2}
-        );
-
-        // レーザーの太さを考慮して判定
-        if (distSq < (white.radius + 5)**2) {
-            // ヒット処理
-            applyDamage(LASER_DAMAGE_VAL, (x1+x2)/2, (y1+y2)/2, true);
-        }
-    }
-
     // ダメージ適用共通関数
     function applyDamage(damage, hitX, hitY, isCritical) {
         if (!IS_INFINITE) white.hp -= damage;
@@ -318,12 +302,11 @@ html_template = """
             isKO = true; white.hp = 0; hitStopTimer = KO_HIT_STOP;
             for(let i=0; i<80; i++) particles.push(new Particle(white.x, white.y, true));
         } else if (!isKO) {
-            hitStopTimer = 3; // レーザーのヒットストップ
+            hitStopTimer = 3; // レーザーヒット時の停止時間
             const pCount = Math.floor(damage / 5) + 3;
             for(let i=0; i<pCount; i++) particles.push(new Particle(hitX, hitY, false, isCritical ? '#00ffff' : '#FFD700'));
         }
     }
-
 
     function onDown(e) {
         if(e.type === 'touchstart') e.preventDefault();
@@ -353,11 +336,10 @@ html_template = """
                             pellets.push(new Pellet(black.x, black.y, baseAngle + spread));
                         }
                     } else if (WEAPON_TYPE === 'laser') {
-                        // ⚡レーザー発射！
+                        // ⚡レーザー発射！(ビーム生成)
                         black.cooldownTimer = LASER_COOLDOWN;
-                        laserBeams = []; // 初期化
-                        fireLaser(black.x, black.y, baseAngle, 0);
-                        hitStopTimer = 2; // 発射時の反動
+                        spawnLaser(black.x, black.y, baseAngle, 0);
+                        // 発射時は揺らさない（ヒット時のみ）
                     }
                 }
             }
@@ -389,6 +371,21 @@ html_template = """
     canvas.addEventListener('mousedown', onDown); canvas.addEventListener('mouseup', onUp); canvas.addEventListener('mousemove', onMove);
     canvas.addEventListener('touchstart', onDown, {passive: false}); canvas.addEventListener('touchend', onUp); canvas.addEventListener('touchmove', onMove, {passive: false});
 
+    // 線分と円の衝突判定ヘルパー
+    function checkLineCircleCollision(x1, y1, x2, y2, cx, cy, r) {
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const lenSq = dx*dx + dy*dy;
+        const t = ((cx - x1) * dx + (cy - y1) * dy) / lenSq;
+        // 線分上の最も近い点
+        const clampedT = Math.max(0, Math.min(1, t));
+        const closestX = x1 + clampedT * dx;
+        const closestY = y1 + clampedT * dy;
+        
+        const distSq = (cx - closestX)**2 + (cy - closestY)**2;
+        return distSq < r*r;
+    }
+
     function update() {
         if (black.cooldownTimer > 0) black.cooldownTimer--;
 
@@ -408,15 +405,15 @@ html_template = """
                 white.x = white.baseX; white.y = white.baseY;
                 screenShakeX = 0; screenShakeY = 0;
             }
-            if (!isKO && WEAPON_TYPE === 'shotgun') {
+            if (!isKO) {
                  pellets.forEach(p => p.update());
-                 checkPelletCollisions();
+                 laserBolts.forEach(l => l.update());
+                 checkProjectileCollisions();
             }
-            // レーザーは一瞬で消えるのでupdateで特別なことはしない
             draw(); requestAnimationFrame(update); return;
         }
 
-        // (各武器の移動ロジックは変更なしのため省略、shotgunと同じくlaserもマウス追従)
+        // 移動ロジック
         if (WEAPON_TYPE === 'ball') {
              if (!black.isDragging) {
                 black.vy += GRAVITY; black.vx *= FRICTION; black.vy *= FRICTION; black.x += black.vx; black.y += black.vy;
@@ -443,49 +440,66 @@ html_template = """
              }
         }
 
+        // 弾の更新
         pellets.forEach(p => p.update());
         pellets = pellets.filter(p => p.life > 0);
+        laserBolts.forEach(l => l.update());
+        laserBolts = laserBolts.filter(l => l.active);
 
         if (white.visible) {
             if(WEAPON_TYPE === 'ball' || WEAPON_TYPE === 'sword') checkMeleeCollisions();
-            if(WEAPON_TYPE === 'shotgun') checkPelletCollisions();
-            // レーザーの判定は発射時に行われる
+            checkProjectileCollisions(); // ショットガン＆レーザー
         }
 
         particles = particles.filter(p => p.life > 0); particles.forEach(p => p.update());
         damagePopups = damagePopups.filter(d => d.life > 0); damagePopups.forEach(d => d.update());
         slashEffects = slashEffects.filter(s => s.life > 0); slashEffects.forEach(s => s.update());
         draw();
-        // ⚡レーザーは1フレームで消える
-        laserBeams = []; 
         requestAnimationFrame(update);
     }
 
-    // (checkPelletCollisions, checkMeleeCollisions は変更なしのため省略、ただしダメージ適用は applyDamage 関数を使うように内部で変更済みと仮定)
-    // ※紙面の都合上、上記共通関数化した applyDamage を使うように既存の判定ロジックも差し替えた体で進めます！
-
-    function checkPelletCollisions() {
+    function checkProjectileCollisions() {
         if (!white.visible) return;
-        let hitCountInFrame = 0;
+        
+        // ショットガン
+        let pelletHit = false;
         pellets.forEach(p => {
             if (p.life <= 0) return;
             const dist = Math.hypot(p.x - white.x, p.y - white.y);
             if (dist < white.radius + p.size) {
-                p.life = 0; hitCountInFrame++;
-                // ★共通関数を使用
+                p.life = 0; pelletHit = true;
                 applyDamage(SHOTGUN_DAMAGE_VAL, p.x, p.y - 20, false);
             }
         });
-        if (hitCountInFrame > 0 && !isKO) {
+        if (pelletHit && !isKO) {
              let stop = 2;
              if (SHOTGUN_DAMAGE_VAL < 8) stop = 1; else if (SHOTGUN_DAMAGE_VAL >= 18) stop = 5; else if (SHOTGUN_DAMAGE_VAL >= 14) stop = 4; else if (SHOTGUN_DAMAGE_VAL >= 10) stop = 3;
              hitStopTimer = stop; 
         }
+
+        // ⚡レーザー判定
+        let laserHit = false;
+        laserBolts.forEach(l => {
+            if (!l.active) return;
+            // ビームは線分として判定
+            // 始点(l.x, l.y) から 終点(ビームの後ろ)
+            const tailX = l.x - Math.cos(l.angle) * LASER_LENGTH;
+            const tailY = l.y - Math.sin(l.angle) * LASER_LENGTH;
+            
+            if (checkLineCircleCollision(tailX, tailY, l.x, l.y, white.x, white.y, white.radius + 5)) {
+                // ビームは貫通するので消さない
+                laserHit = true;
+                applyDamage(LASER_DAMAGE_VAL, white.x, white.y, true);
+            }
+        });
+        // レーザーはヒットストップ中にupdateされない（物理停止）ので、ここでhitStopTimerをセットすると
+        // 次のフレームで判定されなくなり、多段ヒットしすぎを防げる効果もある
+        // ただし貫通感を出したいので、連続ヒットは許可しつつストップさせる
     }
+
     function checkMeleeCollisions() {
          let isHit = false; let damage = 0; let isCritical = false; let hitX = 0, hitY = 0;
          if (WEAPON_TYPE === 'ball') {
-            // (鉄球の判定ロジック...略)
             const dx = black.x - white.x; const dy = black.y - white.y;
             const dist = Math.hypot(dx, dy); const minDist = black.radius + white.radius;
             if (dist < minDist) {
@@ -497,7 +511,6 @@ html_template = """
                 black.vx = Math.cos(angle) * (speed * 0.8 + 2); black.vy = Math.sin(angle) * (speed * 0.8 + 2);
             }
         } else if (WEAPON_TYPE === 'sword') {
-            // (剣の判定ロジック...略)
             if (black.isSwinging) {
                 const dx = black.x - white.x; const dy = black.y - white.y;
                 const dist = Math.hypot(dx, dy);
@@ -516,13 +529,11 @@ html_template = """
             }
         }
         if (isHit) {
-            // ★共通関数を使用
             applyDamage(damage, hitX, hitY, isCritical);
             if (WEAPON_TYPE === 'sword') slashEffects.push(new SlashEffect(white.x, white.y, black.angle));
             if (!isKO) hitStopTimer = (WEAPON_TYPE === 'sword' ? SWORD_HIT_STOP_VAL : 3);
         }
     }
-
 
     function draw() {
         ctx.save(); ctx.translate(screenShakeX, screenShakeY);
@@ -547,10 +558,9 @@ html_template = """
             }
         }
 
-        // 武器描画（ショットガンとレーザーの見た目は同じ）
         if (WEAPON_TYPE === 'ball') {
-             ctx.fillStyle = 'black'; ctx.beginPath(); ctx.arc(black.x, black.y, black.radius, 0, Math.PI * 2); ctx.fill();
-             ctx.fillStyle = '#555'; ctx.beginPath(); ctx.arc(black.x - 10, black.y - 10, 5, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = 'black'; ctx.beginPath(); ctx.arc(black.x, black.y, black.radius, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#555'; ctx.beginPath(); ctx.arc(black.x - 10, black.y - 10, 5, 0, Math.PI * 2); ctx.fill();
         } else if (WEAPON_TYPE === 'sword') {
             ctx.save(); ctx.translate(black.x, black.y); ctx.rotate(black.angle);
             ctx.shadowBlur = 15; ctx.shadowColor = '#00ffff'; ctx.fillStyle = '#ccffff';
@@ -559,7 +569,6 @@ html_template = """
         } else if (WEAPON_TYPE === 'shotgun' || WEAPON_TYPE === 'laser') {
             ctx.save(); ctx.translate(black.x, black.y); ctx.rotate(black.angle);
             ctx.fillStyle = 'black'; ctx.beginPath(); ctx.arc(0, 0, black.radius, 0, Math.PI * 2); ctx.fill();
-            // レーザーは青い銃口
             ctx.fillStyle = WEAPON_TYPE === 'laser' ? '#00ffff' : '#ff5555';
             ctx.beginPath(); ctx.arc(black.radius-5, 0, 8, 0, Math.PI*2); ctx.fill();
             if(black.cooldownTimer > 0) {
@@ -568,17 +577,6 @@ html_template = """
                  ctx.arc(0, 0, black.radius, -Math.PI/2, -Math.PI/2 + (Math.PI*2 * (black.cooldownTimer/(WEAPON_TYPE==='laser'?LASER_COOLDOWN:SHOTGUN_COOLDOWN))), false);
                  ctx.fill();
             }
-            ctx.restore();
-        }
-
-        // ⚡レーザー描画
-        if (laserBeams.length > 0) {
-            ctx.save();
-            ctx.shadowBlur = 20; ctx.shadowColor = '#00ffff';
-            ctx.strokeStyle = '#ccffff'; ctx.lineWidth = 4; ctx.lineCap = 'round';
-            laserBeams.forEach(beam => {
-                ctx.beginPath(); ctx.moveTo(beam.x1, beam.y1); ctx.lineTo(beam.x2, beam.y2); ctx.stroke();
-            });
             ctx.restore();
         }
 
@@ -597,6 +595,7 @@ html_template = """
         }
 
         pellets.forEach(p => p.draw(ctx));
+        laserBolts.forEach(l => l.draw(ctx)); // ⚡レーザー描画
         particles.forEach(p => p.draw(ctx));
         slashEffects.forEach(s => s.draw(ctx));
         damagePopups.forEach(d => d.draw(ctx));
