@@ -1,14 +1,14 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Hit Stop Othello: Fixed Laser", layout="wide")
+st.set_page_config(page_title="Hit Stop Othello: Giant Beam", layout="wide")
 
 # --- サイドバー ---
 st.sidebar.title("🍄 設定メニュー")
 
 weapon_mode = st.sidebar.radio(
     "武器選択 ⚔️",
-    ("鉄球 (Iron Ball)", "聖剣 (Holy Sword)", "ショットガン (Shotgun) 🔫", "レーザーガン (Laser Gun) ⚡")
+    ("鉄球 (Iron Ball)", "聖剣 (Holy Sword)", "ショットガン (Shotgun) 🔫", "レーザーガン (Laser Gun) ⚡", "極太ビーム (Giant Beam) ☄️")
 )
 game_mode = st.sidebar.radio("ゲームモード", ("通常バトル (Normal)", "無限サンドバッグ (Infinite) ♾️"))
 
@@ -16,11 +16,10 @@ game_mode = st.sidebar.radio("ゲームモード", ("通常バトル (Normal)", 
 sword_hit_stop = 5 
 shotgun_damage = 8
 laser_damage = 25 
+giant_beam_damage = 15 # 1ヒットあたりのダメージ
 
-# ★ここがHP調整箇所だっち！★
 if game_mode == "通常バトル (Normal)":
-    # デフォルトを200に変更したよ！
-    start_hp = st.sidebar.slider("白丸のHP", 100, 3000, 200, step=50) 
+    start_hp = st.sidebar.slider("白丸のHP", 100, 5000, 2500, step=100) 
     is_infinite_js = "false"
 else:
     start_hp = 9999
@@ -40,14 +39,20 @@ elif weapon_mode == "ショットガン (Shotgun) 🔫":
     st.sidebar.markdown("---")
     shotgun_damage = st.sidebar.slider("🔫 散弾1発の威力", 1, 20, 8)
     st.sidebar.caption(f"全弾威力: {shotgun_damage * 12}")
-else:
+elif weapon_mode == "レーザーガン (Laser Gun) ⚡":
     weapon_type_js = "'laser'"
     st.sidebar.markdown("---")
-    laser_damage = st.sidebar.slider("⚡ レーザー威力(1本あたり)", 10, 100, 25)
-    st.sidebar.caption("※1本につき1ヒットのみになったよ！")
+    laser_damage = st.sidebar.slider("⚡ レーザー威力", 10, 100, 25)
+else:
+    # 極太ビーム設定
+    weapon_type_js = "'giant_beam'"
+    st.sidebar.markdown("---")
+    giant_beam_damage = st.sidebar.slider("☄️ ビーム威力(1hit)", 5, 50, 15)
+    st.sidebar.caption(f"最大5hit時の合計: {giant_beam_damage * 5}")
+    st.sidebar.success("ゆっくり進む巨大な判定！最大5回ヒットして押し切るだっち！")
 
-st.title("🍄 重力オセロ：バランス調整完了！🛠️")
-st.write("レーザーの多段ヒットを修正して、HPを200基準にしたよ！これで正々堂々バトルだっち！")
+st.title("🍄 重力オセロ：極太ビーム実装！☄️")
+st.write("新武器**「極太ビーム」**！巨大なエネルギー波がゆっくり画面を制圧するよ！多段ヒットの快感を味わうっち！")
 
 html_template = """
 <!DOCTYPE html>
@@ -98,6 +103,7 @@ html_template = """
     const SWORD_HIT_STOP_VAL = __SWORD_HIT_STOP__;
     const SHOTGUN_DAMAGE_VAL = __SHOTGUN_DAMAGE__;
     const LASER_DAMAGE_VAL = __LASER_DAMAGE__;
+    const GIANT_BEAM_DAMAGE_VAL = __GIANT_BEAM_DAMAGE__;
 
     function resizeCanvas() {
         canvas.width = window.innerWidth;
@@ -113,10 +119,14 @@ html_template = """
     const SWORD_LENGTH = 130; const SWORD_SWING_ANGLE = 120 * (Math.PI / 180); const SWORD_SPEED = 12;
     const FIXED_UP_ANGLE = -Math.PI / 2; 
     const SHOTGUN_PELLETS = 12; const SHOTGUN_SPREAD = Math.PI / 5; const SHOTGUN_SPEED = 25; const SHOTGUN_COOLDOWN = 40; 
-    const LASER_COOLDOWN = 30;
-    const LASER_SPEED = 45; 
-    const LASER_LENGTH = 160; 
-    const LASER_SPREAD = Math.PI / 6; 
+    const LASER_COOLDOWN = 30; const LASER_SPEED = 45; const LASER_LENGTH = 160; const LASER_SPREAD = Math.PI / 6; 
+    
+    // ☄️極太ビーム設定
+    const GIANT_BEAM_SPEED = 8; // ゆっくり
+    const GIANT_BEAM_WIDTH = 240; // 横3マス分(長さ)
+    const GIANT_BEAM_HEIGHT = 80; // 縦1マス分(太さ)
+    const GIANT_BEAM_COOLDOWN = 60; // 連射遅め
+    const GIANT_BEAM_MAX_HITS = 5;
 
     let black = { 
         x: 100, y: 100, vx: 0, vy: 0, radius: 30, 
@@ -153,6 +163,7 @@ html_template = """
     let damagePopups = [];
     let pellets = []; 
     let laserBolts = []; 
+    let giantBeams = []; // ☄️極太ビーム配列
     let screenShakeX = 0, screenShakeY = 0;
 
     class Particle {
@@ -201,63 +212,68 @@ html_template = """
 
     class LaserBolt {
         constructor(x, y, angle, generation) {
-            this.x = x; this.y = y;
-            this.angle = angle;
-            this.vx = Math.cos(angle) * LASER_SPEED;
-            this.vy = Math.sin(angle) * LASER_SPEED;
-            this.generation = generation; 
-            this.life = 100; 
-            this.active = true;
-            // ★すでにヒットしたかどうかのフラグを追加！
-            this.hasHit = false;
+            this.x = x; this.y = y; this.angle = angle;
+            this.vx = Math.cos(angle) * LASER_SPEED; this.vy = Math.sin(angle) * LASER_SPEED;
+            this.generation = generation; this.life = 100; this.active = true; this.hasHit = false;
         }
         update() {
-            let nextX = this.x + this.vx;
-            let nextY = this.y + this.vy;
-            let hitWall = false;
-            let wallNormal = 0; 
-
+            let nextX = this.x + this.vx; let nextY = this.y + this.vy; let hitWall = false; let wallNormal = 0; 
             if (nextX > canvas.width) { nextX = canvas.width; hitWall = true; wallNormal = Math.PI; }
             else if (nextX < 0) { nextX = 0; hitWall = true; wallNormal = 0; }
-            
             if (nextY > canvas.height) { nextY = canvas.height; hitWall = true; wallNormal = -Math.PI/2; }
             else if (nextY < 0) { nextY = 0; hitWall = true; wallNormal = Math.PI/2; }
-
             if (hitWall) {
                 this.active = false; 
                 if (this.generation < 1) {
                     let reflectAngle = this.angle;
-                    if (wallNormal === 0 || wallNormal === Math.PI) { 
-                        reflectAngle = Math.PI - this.angle;
-                    } else { 
-                        reflectAngle = -this.angle;
-                    }
-                    spawnLaser(nextX, nextY, reflectAngle, this.generation + 1); 
-                    spawnLaser(nextX, nextY, reflectAngle + LASER_SPREAD, this.generation + 1); 
-                    spawnLaser(nextX, nextY, reflectAngle - LASER_SPREAD, this.generation + 1); 
+                    if (wallNormal === 0 || wallNormal === Math.PI) reflectAngle = Math.PI - this.angle; else reflectAngle = -this.angle;
+                    spawnLaser(nextX, nextY, reflectAngle, this.generation + 1); spawnLaser(nextX, nextY, reflectAngle + LASER_SPREAD, this.generation + 1); spawnLaser(nextX, nextY, reflectAngle - LASER_SPREAD, this.generation + 1); 
                     for(let i=0; i<5; i++) particles.push(new Particle(nextX, nextY, false, '#00ffff'));
                 }
-            } else {
-                this.x = nextX;
-                this.y = nextY;
-            }
-            this.life--;
-            if(this.life <= 0) this.active = false;
+            } else { this.x = nextX; this.y = nextY; }
+            this.life--; if(this.life <= 0) this.active = false;
         }
         draw(ctx) {
-            ctx.save();
-            ctx.shadowBlur = 15; ctx.shadowColor = '#00ffff';
-            ctx.strokeStyle = '#ccffff'; ctx.lineWidth = 4; ctx.lineCap = 'round';
-            ctx.beginPath();
-            ctx.moveTo(this.x, this.y);
-            ctx.lineTo(this.x - Math.cos(this.angle)*LASER_LENGTH, this.y - Math.sin(this.angle)*LASER_LENGTH);
-            ctx.stroke();
+            ctx.save(); ctx.shadowBlur = 15; ctx.shadowColor = '#00ffff'; ctx.strokeStyle = '#ccffff'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(this.x - Math.cos(this.angle)*LASER_LENGTH, this.y - Math.sin(this.angle)*LASER_LENGTH); ctx.stroke();
             ctx.restore();
         }
     }
+    function spawnLaser(x, y, angle, generation) { laserBolts.push(new LaserBolt(x, y, angle, generation)); }
 
-    function spawnLaser(x, y, angle, generation) {
-        laserBolts.push(new LaserBolt(x, y, angle, generation));
+    // ☄️極太ビームクラス
+    class GiantBeam {
+        constructor(x, y, angle) {
+            this.x = x; this.y = y;
+            this.angle = angle;
+            this.vx = Math.cos(angle) * GIANT_BEAM_SPEED;
+            this.vy = Math.sin(angle) * GIANT_BEAM_SPEED;
+            this.life = 150; 
+            this.hitCount = 0; // 現在のヒット数
+            this.hitCooldown = 0; // 多段ヒット間隔調整用
+        }
+        update() {
+            this.x += this.vx; this.y += this.vy;
+            this.life--;
+            if (this.hitCooldown > 0) this.hitCooldown--;
+        }
+        draw(ctx) {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.angle);
+            
+            // ビーム本体（紫の怪しい光）
+            ctx.shadowBlur = 30; ctx.shadowColor = '#ff00ff';
+            ctx.fillStyle = 'rgba(255, 200, 255, 0.8)'; // 中心は白っぽく
+            // 長方形を描画 (中心基準)
+            ctx.fillRect(0, -GIANT_BEAM_HEIGHT/2, GIANT_BEAM_WIDTH, GIANT_BEAM_HEIGHT);
+            
+            // 外枠
+            ctx.strokeStyle = '#ff00ff'; ctx.lineWidth = 4;
+            ctx.strokeRect(0, -GIANT_BEAM_HEIGHT/2, GIANT_BEAM_WIDTH, GIANT_BEAM_HEIGHT);
+            
+            ctx.restore();
+        }
     }
 
     class DamagePopup {
@@ -290,9 +306,9 @@ html_template = """
             isKO = true; white.hp = 0; hitStopTimer = KO_HIT_STOP;
             for(let i=0; i<80; i++) particles.push(new Particle(white.x, white.y, true));
         } else if (!isKO) {
-            hitStopTimer = 3; 
+            hitStopTimer = 4; // ビームのヒットストップは少し重め
             const pCount = Math.floor(damage / 5) + 3;
-            for(let i=0; i<pCount; i++) particles.push(new Particle(hitX, hitY, false, isCritical ? '#00ffff' : '#FFD700'));
+            for(let i=0; i<pCount; i++) particles.push(new Particle(hitX, hitY, false, isCritical ? '#ff00ff' : '#FFD700'));
         }
     }
 
@@ -309,7 +325,7 @@ html_template = """
             if (!black.isSwinging) {
                 black.isSwinging = true; black.swingProgress = 0; black.hitFlags = [false, false, false]; black.baseAngle = FIXED_UP_ANGLE;
             }
-        } else if (WEAPON_TYPE === 'shotgun' || WEAPON_TYPE === 'laser') {
+        } else if (WEAPON_TYPE === 'shotgun' || WEAPON_TYPE === 'laser' || WEAPON_TYPE === 'giant_beam') {
             if (dist < black.radius * 2.5) {
                 black.isDragging = true; black.vx = 0; black.vy = 0;
             } else {
@@ -325,6 +341,14 @@ html_template = """
                     } else if (WEAPON_TYPE === 'laser') {
                         black.cooldownTimer = LASER_COOLDOWN;
                         spawnLaser(black.x, black.y, baseAngle, 0);
+                    } else if (WEAPON_TYPE === 'giant_beam') {
+                        // ☄️極太ビーム発射
+                        black.cooldownTimer = GIANT_BEAM_COOLDOWN;
+                        // 発射反動
+                        hitStopTimer = 6; 
+                        screenShakeX = Math.cos(baseAngle) * -10; // 逆方向に揺れる
+                        screenShakeY = Math.sin(baseAngle) * -10;
+                        giantBeams.push(new GiantBeam(black.x, black.y, baseAngle));
                     }
                 }
             }
@@ -346,7 +370,7 @@ html_template = """
             black.targetX = pos.x; black.targetY = pos.y; 
         }
         
-        if ((WEAPON_TYPE === 'shotgun' || WEAPON_TYPE === 'laser') && !black.isDragging) {
+        if ((WEAPON_TYPE === 'shotgun' || WEAPON_TYPE === 'laser' || WEAPON_TYPE === 'giant_beam') && !black.isDragging) {
              black.angle = Math.atan2(mouseY - black.y, mouseX - black.x);
         }
     }
@@ -356,7 +380,7 @@ html_template = """
     canvas.addEventListener('mousedown', onDown); canvas.addEventListener('mouseup', onUp); canvas.addEventListener('mousemove', onMove);
     canvas.addEventListener('touchstart', onDown, {passive: false}); canvas.addEventListener('touchend', onUp); canvas.addEventListener('touchmove', onMove, {passive: false});
 
-    // 線分と円の衝突判定ヘルパー
+    // 線分と円の衝突
     function checkLineCircleCollision(x1, y1, x2, y2, cx, cy, r) {
         const dx = x2 - x1; const dy = y2 - y1;
         const lenSq = dx*dx + dy*dy;
@@ -375,6 +399,7 @@ html_template = """
             hitStopTimer--;
             let baseShake = (WEAPON_TYPE === 'sword' ? 3 : 10);
             if (WEAPON_TYPE === 'shotgun' || WEAPON_TYPE === 'laser') baseShake = 5;
+            if (WEAPON_TYPE === 'giant_beam') baseShake = 15; // ビームは揺れが大きい
 
             const shakePower = isKO ? 30 * (hitStopTimer/KO_HIT_STOP) : baseShake;
             screenShakeX = (Math.random() - 0.5) * shakePower;
@@ -390,6 +415,8 @@ html_template = """
             if (!isKO) {
                  pellets.forEach(p => p.update());
                  laserBolts.forEach(l => l.update());
+                 giantBeams.forEach(b => b.update()); // ビームは止まっても判定続ける？いや、止まってる間はヒットストップ演出優先
+                 // だけど多段ヒットさせたいから、ヒットストップ中も動かす
                  checkProjectileCollisions();
             }
             draw(); requestAnimationFrame(update); return;
@@ -415,7 +442,7 @@ html_template = """
             } else {
                 black.baseAngle = FIXED_UP_ANGLE; black.angle = FIXED_UP_ANGLE + Math.sin(Date.now() / 400) * 0.05; 
             }
-        } else if (WEAPON_TYPE === 'shotgun' || WEAPON_TYPE === 'laser') {
+        } else if (WEAPON_TYPE === 'shotgun' || WEAPON_TYPE === 'laser' || WEAPON_TYPE === 'giant_beam') {
              if (!black.isDragging) {
                  black.angle = Math.atan2(mouseY - black.y, mouseX - black.x);
              }
@@ -425,6 +452,8 @@ html_template = """
         pellets = pellets.filter(p => p.life > 0);
         laserBolts.forEach(l => l.update());
         laserBolts = laserBolts.filter(l => l.active);
+        giantBeams.forEach(b => b.update());
+        giantBeams = giantBeams.filter(b => b.life > 0);
 
         if (white.visible) {
             if(WEAPON_TYPE === 'ball' || WEAPON_TYPE === 'sword') checkMeleeCollisions();
@@ -441,6 +470,7 @@ html_template = """
     function checkProjectileCollisions() {
         if (!white.visible) return;
         
+        // ショットガン
         let pelletHit = false;
         pellets.forEach(p => {
             if (p.life <= 0) return;
@@ -456,17 +486,46 @@ html_template = """
              hitStopTimer = stop; 
         }
 
-        let laserHit = false;
+        // レーザー
         laserBolts.forEach(l => {
-            if (!l.active || l.hasHit) return; // ★すでにヒットしたビームは無視！
-            
+            if (!l.active || l.hasHit) return; 
             const tailX = l.x - Math.cos(l.angle) * LASER_LENGTH;
             const tailY = l.y - Math.sin(l.angle) * LASER_LENGTH;
-            
             if (checkLineCircleCollision(tailX, tailY, l.x, l.y, white.x, white.y, white.radius + 5)) {
-                l.hasHit = true; // ★ヒットフラグを立てる
-                laserHit = true;
+                l.hasHit = true; 
                 applyDamage(LASER_DAMAGE_VAL, white.x, white.y, true);
+            }
+        });
+
+        // ☄️極太ビーム判定
+        giantBeams.forEach(b => {
+            if (b.hitCount >= GIANT_BEAM_MAX_HITS) return; // ヒット数制限
+            if (b.hitCooldown > 0) return; // クールダウン中
+
+            // 矩形と円の衝突判定（回転あり）
+            // 1. 円をビームのローカル座標系に変換
+            const dx = white.x - b.x;
+            const dy = white.y - b.y;
+            // ビームの角度分、逆回転させる
+            const localX = dx * Math.cos(-b.angle) - dy * Math.sin(-b.angle);
+            const localY = dx * Math.sin(-b.angle) + dy * Math.cos(-b.angle);
+
+            // 2. AABB判定 (ビームは原点から +X 方向に伸びている)
+            // ビームの矩形: x=[0, WIDTH], y=[-HEIGHT/2, HEIGHT/2]
+            // 最近接点を求める
+            const closestX = Math.max(0, Math.min(localX, GIANT_BEAM_WIDTH));
+            const closestY = Math.max(-GIANT_BEAM_HEIGHT/2, Math.min(localY, GIANT_BEAM_HEIGHT/2));
+
+            // 3. 距離チェック
+            const distX = localX - closestX;
+            const distY = localY - closestY;
+            const distanceSq = (distX * distX) + (distY * distY);
+
+            if (distanceSq < (white.radius * white.radius)) {
+                // ヒット！
+                b.hitCount++;
+                b.hitCooldown = 10; // 10フレーム後に次が当たる
+                applyDamage(GIANT_BEAM_DAMAGE_VAL, white.x, white.y, true);
             }
         });
     }
@@ -540,15 +599,27 @@ html_template = """
             ctx.shadowBlur = 15; ctx.shadowColor = '#00ffff'; ctx.fillStyle = '#ccffff';
             ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(0, 10); ctx.lineTo(SWORD_LENGTH, 0); ctx.fill();
             ctx.shadowBlur = 0; ctx.fillStyle = '#555'; ctx.fillRect(0, -8, 25, 16); ctx.fillStyle = '#888'; ctx.fillRect(5, -20, 10, 40); ctx.restore();
-        } else if (WEAPON_TYPE === 'shotgun' || WEAPON_TYPE === 'laser') {
+        } else if (WEAPON_TYPE === 'shotgun' || WEAPON_TYPE === 'laser' || WEAPON_TYPE === 'giant_beam') {
             ctx.save(); ctx.translate(black.x, black.y); ctx.rotate(black.angle);
             ctx.fillStyle = 'black'; ctx.beginPath(); ctx.arc(0, 0, black.radius, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = WEAPON_TYPE === 'laser' ? '#00ffff' : '#ff5555';
+            
+            // 銃口の色分け
+            if (WEAPON_TYPE === 'laser') ctx.fillStyle = '#00ffff';
+            else if (WEAPON_TYPE === 'giant_beam') ctx.fillStyle = '#ff00ff';
+            else ctx.fillStyle = '#ff5555';
+            
             ctx.beginPath(); ctx.arc(black.radius-5, 0, 8, 0, Math.PI*2); ctx.fill();
             if(black.cooldownTimer > 0) {
-                 ctx.fillStyle = WEAPON_TYPE === 'laser' ? 'rgba(0, 255, 255, 0.5)' : 'rgba(255, 0, 0, 0.5)';
+                 if (WEAPON_TYPE === 'laser') ctx.fillStyle = 'rgba(0, 255, 255, 0.5)';
+                 else if (WEAPON_TYPE === 'giant_beam') ctx.fillStyle = 'rgba(255, 0, 255, 0.5)';
+                 else ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+                 
+                 let maxCD = SHOTGUN_COOLDOWN;
+                 if(WEAPON_TYPE === 'laser') maxCD = LASER_COOLDOWN;
+                 if(WEAPON_TYPE === 'giant_beam') maxCD = GIANT_BEAM_COOLDOWN;
+                 
                  ctx.beginPath(); ctx.moveTo(0,0);
-                 ctx.arc(0, 0, black.radius, -Math.PI/2, -Math.PI/2 + (Math.PI*2 * (black.cooldownTimer/(WEAPON_TYPE==='laser'?LASER_COOLDOWN:SHOTGUN_COOLDOWN))), false);
+                 ctx.arc(0, 0, black.radius, -Math.PI/2, -Math.PI/2 + (Math.PI*2 * (black.cooldownTimer/maxCD)), false);
                  ctx.fill();
             }
             ctx.restore();
@@ -560,6 +631,7 @@ html_template = """
             else { 
                 if (WEAPON_TYPE === 'ball') ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)';
                 else if (WEAPON_TYPE === 'sword' || WEAPON_TYPE === 'laser') ctx.strokeStyle = 'rgba(0, 255, 255, 0.8)';
+                else if (WEAPON_TYPE === 'giant_beam') ctx.strokeStyle = 'rgba(255, 0, 255, 0.8)';
                 else ctx.strokeStyle = 'rgba(255, 100, 0, 0.8)'; 
             }
             let ringX = isKO ? white.x : (WEAPON_TYPE==='ball' ? (black.x + white.x)/2 : white.x);
@@ -569,7 +641,8 @@ html_template = """
         }
 
         pellets.forEach(p => p.draw(ctx));
-        laserBolts.forEach(l => l.draw(ctx)); // ⚡レーザー描画
+        laserBolts.forEach(l => l.draw(ctx));
+        giantBeams.forEach(b => b.draw(ctx)); // ☄️
         particles.forEach(p => p.draw(ctx));
         slashEffects.forEach(s => s.draw(ctx));
         damagePopups.forEach(d => d.draw(ctx));
@@ -587,6 +660,7 @@ final_html_code = html_template.replace("__IS_INFINITE__", is_infinite_js) \
                                .replace("__WEAPON_TYPE__", weapon_type_js) \
                                .replace("__SWORD_HIT_STOP__", str(sword_hit_stop)) \
                                .replace("__SHOTGUN_DAMAGE__", str(shotgun_damage)) \
-                               .replace("__LASER_DAMAGE__", str(laser_damage))
+                               .replace("__LASER_DAMAGE__", str(laser_damage)) \
+                               .replace("__GIANT_BEAM_DAMAGE__", str(giant_beam_damage))
 
 components.html(final_html_code, height=600, scrolling=False)
