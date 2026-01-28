@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Hit Stop Othello: Giant Beam", layout="wide")
+st.set_page_config(page_title="Hit Stop Othello: Ultimate Giant Beam", layout="wide")
 
 # --- サイドバー ---
 st.sidebar.title("🍄 設定メニュー")
@@ -16,7 +16,7 @@ game_mode = st.sidebar.radio("ゲームモード", ("通常バトル (Normal)", 
 sword_hit_stop = 5 
 shotgun_damage = 8
 laser_damage = 25 
-giant_beam_damage = 15 # 1ヒットあたりのダメージ
+giant_beam_damage = 15 
 
 if game_mode == "通常バトル (Normal)":
     start_hp = st.sidebar.slider("白丸のHP", 100, 5000, 2500, step=100) 
@@ -44,15 +44,14 @@ elif weapon_mode == "レーザーガン (Laser Gun) ⚡":
     st.sidebar.markdown("---")
     laser_damage = st.sidebar.slider("⚡ レーザー威力", 10, 100, 25)
 else:
-    # 極太ビーム設定
     weapon_type_js = "'giant_beam'"
     st.sidebar.markdown("---")
     giant_beam_damage = st.sidebar.slider("☄️ ビーム威力(1hit)", 5, 50, 15)
     st.sidebar.caption(f"最大5hit時の合計: {giant_beam_damage * 5}")
-    st.sidebar.success("ゆっくり進む巨大な判定！最大5回ヒットして押し切るだっち！")
+    st.sidebar.success("角が丸くなってエフェクトも超強化！これが真の極太ビームだっち！☄️")
 
-st.title("🍄 重力オセロ：極太ビーム実装！☄️")
-st.write("新武器**「極太ビーム」**！巨大なエネルギー波がゆっくり画面を制圧するよ！多段ヒットの快感を味わうっち！")
+st.title("🍄 重力オセロ：極太ビーム超進化！☄️")
+st.write("ビームの見た目を**エフェクト盛り盛り**に強化！発射、飛行、ヒット、全てがド派手になったっち！")
 
 html_template = """
 <!DOCTYPE html>
@@ -122,10 +121,10 @@ html_template = """
     const LASER_COOLDOWN = 30; const LASER_SPEED = 45; const LASER_LENGTH = 160; const LASER_SPREAD = Math.PI / 6; 
     
     // ☄️極太ビーム設定
-    const GIANT_BEAM_SPEED = 8; // ゆっくり
-    const GIANT_BEAM_WIDTH = 240; // 横3マス分(長さ)
-    const GIANT_BEAM_HEIGHT = 80; // 縦1マス分(太さ)
-    const GIANT_BEAM_COOLDOWN = 60; // 連射遅め
+    const GIANT_BEAM_SPEED = 8; 
+    const GIANT_BEAM_WIDTH = 240; 
+    const GIANT_BEAM_HEIGHT = 80; 
+    const GIANT_BEAM_COOLDOWN = 60; 
     const GIANT_BEAM_MAX_HITS = 5;
 
     let black = { 
@@ -163,7 +162,7 @@ html_template = """
     let damagePopups = [];
     let pellets = []; 
     let laserBolts = []; 
-    let giantBeams = []; // ☄️極太ビーム配列
+    let giantBeams = []; 
     let screenShakeX = 0, screenShakeY = 0;
 
     class Particle {
@@ -241,37 +240,75 @@ html_template = """
     }
     function spawnLaser(x, y, angle, generation) { laserBolts.push(new LaserBolt(x, y, angle, generation)); }
 
-    // ☄️極太ビームクラス
+    // ☄️極太ビームクラス（エフェクト強化版）
     class GiantBeam {
         constructor(x, y, angle) {
-            this.x = x; this.y = y;
-            this.angle = angle;
-            this.vx = Math.cos(angle) * GIANT_BEAM_SPEED;
-            this.vy = Math.sin(angle) * GIANT_BEAM_SPEED;
-            this.life = 150; 
-            this.hitCount = 0; // 現在のヒット数
-            this.hitCooldown = 0; // 多段ヒット間隔調整用
+            this.x = x; this.y = y; this.angle = angle;
+            this.vx = Math.cos(angle) * GIANT_BEAM_SPEED; this.vy = Math.sin(angle) * GIANT_BEAM_SPEED;
+            this.life = 150; this.hitCount = 0; this.hitCooldown = 0;
+            this.isHitting = false; // ヒット中フラグ
         }
         update() {
-            this.x += this.vx; this.y += this.vy;
-            this.life--;
+            this.x += this.vx; this.y += this.vy; this.life--;
             if (this.hitCooldown > 0) this.hitCooldown--;
+            
+            // 飛行エフェクト（周囲に粒子をまき散らす）
+            if(Math.random() < 0.3) {
+                const pX = this.x + (Math.random() - 0.5) * GIANT_BEAM_WIDTH * 0.8;
+                const pY = this.y + (Math.random() - 0.5) * GIANT_BEAM_HEIGHT * 0.8;
+                particles.push(new Particle(pX, pY, false, '#ff55ff'));
+            }
+            // ヒット中エフェクト
+            if(this.isHitting && Math.random() < 0.5) {
+                 particles.push(new Particle(white.x, white.y, false, '#ff00ff'));
+            }
+            this.isHitting = false; // リセット
         }
         draw(ctx) {
-            ctx.save();
-            ctx.translate(this.x, this.y);
-            ctx.rotate(this.angle);
+            ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.angle);
             
-            // ビーム本体（紫の怪しい光）
-            ctx.shadowBlur = 30; ctx.shadowColor = '#ff00ff';
-            ctx.fillStyle = 'rgba(255, 200, 255, 0.8)'; // 中心は白っぽく
-            // 長方形を描画 (中心基準)
-            ctx.fillRect(0, -GIANT_BEAM_HEIGHT/2, GIANT_BEAM_WIDTH, GIANT_BEAM_HEIGHT);
+            // ★角丸＆グラデーション＆発光強化★
+            const r = GIANT_BEAM_HEIGHT / 2; // 角丸の半径
+            const w = GIANT_BEAM_WIDTH;
+            const h = GIANT_BEAM_HEIGHT;
             
-            // 外枠
-            ctx.strokeStyle = '#ff00ff'; ctx.lineWidth = 4;
-            ctx.strokeRect(0, -GIANT_BEAM_HEIGHT/2, GIANT_BEAM_WIDTH, GIANT_BEAM_HEIGHT);
+            // パスで角丸長方形を定義
+            ctx.beginPath();
+            ctx.moveTo(r, -h/2);
+            ctx.lineTo(w-r, -h/2);
+            ctx.quadraticCurveTo(w, -h/2, w, 0);
+            ctx.quadraticCurveTo(w, h/2, w-r, h/2);
+            ctx.lineTo(r, h/2);
+            ctx.quadraticCurveTo(0, h/2, 0, 0);
+            ctx.quadraticCurveTo(0, -h/2, r, -h/2);
+            ctx.closePath();
+
+            // 外側の強い発光
+            ctx.shadowBlur = 40; ctx.shadowColor = '#ff00ff';
             
+            // グラデーション塗りつぶし
+            const grad = ctx.createLinearGradient(0, -h/2, 0, h/2);
+            grad.addColorStop(0, 'rgba(255, 100, 255, 0.5)');
+            grad.addColorStop(0.5, 'rgba(255, 220, 255, 0.9)'); // 中心は明るく
+            grad.addColorStop(1, 'rgba(255, 100, 255, 0.5)');
+            ctx.fillStyle = grad;
+            ctx.fill();
+            
+            // さらに内側にもう一層明るいコアを描く
+            ctx.shadowBlur = 20; ctx.shadowColor = '#ffffff';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            const coreMargin = 10;
+            ctx.beginPath();
+            ctx.moveTo(r, -h/2 + coreMargin);
+            ctx.lineTo(w-r, -h/2 + coreMargin);
+            ctx.quadraticCurveTo(w-coreMargin, -h/2 + coreMargin, w-coreMargin, 0);
+            ctx.quadraticCurveTo(w-coreMargin, h/2 - coreMargin, w-r, h/2 - coreMargin);
+            ctx.lineTo(r, h/2 - coreMargin);
+            ctx.quadraticCurveTo(coreMargin, h/2 - coreMargin, coreMargin, 0);
+            ctx.quadraticCurveTo(coreMargin, -h/2 + coreMargin, r, -h/2 + coreMargin);
+            ctx.closePath();
+            ctx.fill();
+
             ctx.restore();
         }
     }
@@ -306,7 +343,7 @@ html_template = """
             isKO = true; white.hp = 0; hitStopTimer = KO_HIT_STOP;
             for(let i=0; i<80; i++) particles.push(new Particle(white.x, white.y, true));
         } else if (!isKO) {
-            hitStopTimer = 4; // ビームのヒットストップは少し重め
+            hitStopTimer = 4; 
             const pCount = Math.floor(damage / 5) + 3;
             for(let i=0; i<pCount; i++) particles.push(new Particle(hitX, hitY, false, isCritical ? '#ff00ff' : '#FFD700'));
         }
@@ -344,11 +381,12 @@ html_template = """
                     } else if (WEAPON_TYPE === 'giant_beam') {
                         // ☄️極太ビーム発射
                         black.cooldownTimer = GIANT_BEAM_COOLDOWN;
-                        // 発射反動
                         hitStopTimer = 6; 
-                        screenShakeX = Math.cos(baseAngle) * -10; // 逆方向に揺れる
+                        screenShakeX = Math.cos(baseAngle) * -10; 
                         screenShakeY = Math.sin(baseAngle) * -10;
                         giantBeams.push(new GiantBeam(black.x, black.y, baseAngle));
+                        // ★マズルフラッシュ追加！★
+                        for(let i=0; i<30; i++) particles.push(new Particle(black.x + Math.cos(baseAngle)*40, black.y + Math.sin(baseAngle)*40, true, '#ff55ff'));
                     }
                 }
             }
@@ -399,7 +437,7 @@ html_template = """
             hitStopTimer--;
             let baseShake = (WEAPON_TYPE === 'sword' ? 3 : 10);
             if (WEAPON_TYPE === 'shotgun' || WEAPON_TYPE === 'laser') baseShake = 5;
-            if (WEAPON_TYPE === 'giant_beam') baseShake = 15; // ビームは揺れが大きい
+            if (WEAPON_TYPE === 'giant_beam') baseShake = 15;
 
             const shakePower = isKO ? 30 * (hitStopTimer/KO_HIT_STOP) : baseShake;
             screenShakeX = (Math.random() - 0.5) * shakePower;
@@ -415,8 +453,7 @@ html_template = """
             if (!isKO) {
                  pellets.forEach(p => p.update());
                  laserBolts.forEach(l => l.update());
-                 giantBeams.forEach(b => b.update()); // ビームは止まっても判定続ける？いや、止まってる間はヒットストップ演出優先
-                 // だけど多段ヒットさせたいから、ヒットストップ中も動かす
+                 giantBeams.forEach(b => b.update());
                  checkProjectileCollisions();
             }
             draw(); requestAnimationFrame(update); return;
@@ -499,32 +536,26 @@ html_template = """
 
         // ☄️極太ビーム判定
         giantBeams.forEach(b => {
-            if (b.hitCount >= GIANT_BEAM_MAX_HITS) return; // ヒット数制限
-            if (b.hitCooldown > 0) return; // クールダウン中
+            if (b.hitCount >= GIANT_BEAM_MAX_HITS) return; 
+            if (b.hitCooldown > 0) return; 
 
-            // 矩形と円の衝突判定（回転あり）
-            // 1. 円をビームのローカル座標系に変換
-            const dx = white.x - b.x;
-            const dy = white.y - b.y;
-            // ビームの角度分、逆回転させる
+            const dx = white.x - b.x; const dy = white.y - b.y;
             const localX = dx * Math.cos(-b.angle) - dy * Math.sin(-b.angle);
             const localY = dx * Math.sin(-b.angle) + dy * Math.cos(-b.angle);
+            
+            // 判定用の矩形は少し小さめにする（見た目とのズレ補正）
+            const hitW = GIANT_BEAM_WIDTH * 0.9;
+            const hitH = GIANT_BEAM_HEIGHT * 0.8;
 
-            // 2. AABB判定 (ビームは原点から +X 方向に伸びている)
-            // ビームの矩形: x=[0, WIDTH], y=[-HEIGHT/2, HEIGHT/2]
-            // 最近接点を求める
-            const closestX = Math.max(0, Math.min(localX, GIANT_BEAM_WIDTH));
-            const closestY = Math.max(-GIANT_BEAM_HEIGHT/2, Math.min(localY, GIANT_BEAM_HEIGHT/2));
-
-            // 3. 距離チェック
-            const distX = localX - closestX;
-            const distY = localY - closestY;
+            const closestX = Math.max(0, Math.min(localX, hitW));
+            const closestY = Math.max(-hitH/2, Math.min(localY, hitH/2));
+            const distX = localX - closestX; const distY = localY - closestY;
             const distanceSq = (distX * distX) + (distY * distY);
 
             if (distanceSq < (white.radius * white.radius)) {
-                // ヒット！
                 b.hitCount++;
-                b.hitCooldown = 10; // 10フレーム後に次が当たる
+                b.hitCooldown = 10; 
+                b.isHitting = true; // ★ヒット中フラグON
                 applyDamage(GIANT_BEAM_DAMAGE_VAL, white.x, white.y, true);
             }
         });
@@ -603,7 +634,6 @@ html_template = """
             ctx.save(); ctx.translate(black.x, black.y); ctx.rotate(black.angle);
             ctx.fillStyle = 'black'; ctx.beginPath(); ctx.arc(0, 0, black.radius, 0, Math.PI * 2); ctx.fill();
             
-            // 銃口の色分け
             if (WEAPON_TYPE === 'laser') ctx.fillStyle = '#00ffff';
             else if (WEAPON_TYPE === 'giant_beam') ctx.fillStyle = '#ff00ff';
             else ctx.fillStyle = '#ff5555';
@@ -642,7 +672,7 @@ html_template = """
 
         pellets.forEach(p => p.draw(ctx));
         laserBolts.forEach(l => l.draw(ctx));
-        giantBeams.forEach(b => b.draw(ctx)); // ☄️
+        giantBeams.forEach(b => b.draw(ctx)); 
         particles.forEach(p => p.draw(ctx));
         slashEffects.forEach(s => s.draw(ctx));
         damagePopups.forEach(d => d.draw(ctx));
