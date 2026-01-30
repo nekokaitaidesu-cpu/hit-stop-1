@@ -4,11 +4,11 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="Hit Stop Othello: Heavy Ball Return", layout="wide")
 
 # --- サイドバー ---
-st.sidebar.title("🍄 設定メニュー")
+st.sidebar.title("設定メニュー")
 
 weapon_mode = st.sidebar.radio(
     "武器選択 ⚔️",
-    ("鉄球 (Iron Ball)", "聖剣 (Holy Sword)", "ショットガン (Shotgun) 🔫", "レーザーガン (Laser Gun) ⚡", "極太ビーム (Giant Beam) ☄️")
+    ("鉄球 (Iron Ball)", "聖剣 (Holy Sword)", "ショットガン (Shotgun) ", "レーザーガン (Laser Gun) ", "極太ビーム (Giant Beam) ")
 )
 game_mode = st.sidebar.radio("ゲームモード", ("通常バトル (Normal)", "無限サンドバッグ (Infinite) ♾️"))
 
@@ -19,7 +19,7 @@ laser_damage = 25
 giant_beam_damage = 15 
 
 if game_mode == "通常バトル (Normal)":
-    start_hp = st.sidebar.slider("白丸のHP", 100, 5000, 2500, step=100) 
+    start_hp = st.sidebar.slider("白丸のHP", 100, 5000, 200, step=100) 
     is_infinite_js = "false"
 else:
     start_hp = 9999
@@ -27,7 +27,7 @@ else:
 
 if weapon_mode == "鉄球 (Iron Ball)":
     weapon_type_js = "'ball'"
-    st.sidebar.info("完全復活！速度に応じてヒットストップが変化する「重量級」武器だっち！⚫")
+    st.sidebar.info("速度に応じてヒットストップが変化する武器！⚫")
 elif weapon_mode == "聖剣 (Holy Sword)":
     weapon_type_js = "'sword'"
     st.sidebar.markdown("---")
@@ -49,8 +49,8 @@ else:
     giant_beam_damage = st.sidebar.slider("☄️ ビーム威力(1hit)", 5, 50, 15)
     st.sidebar.caption(f"最大5hit時の合計: {giant_beam_damage * 5}")
 
-st.title("🍄 重力オセロ：鉄球の重み復活！⚫")
-st.write("鉄球モードのヒットストップ計算式を修正！フルスイングした時の**「ズゴォン！」**という重い手応えが戻ってきたよ！")
+st.title("ヒットストップで気持ちよくなる")
+st.write("いろんな武器で白玉を叩いてみよう！")
 
 html_template = """
 <!DOCTYPE html>
@@ -546,7 +546,6 @@ html_template = """
                 slashEffects.push(new SlashEffect(white.x, white.y, black.angle));
                 if (!isKO) hitStopTimer = SWORD_HIT_STOP_VAL;
             } else if (WEAPON_TYPE === 'ball') {
-                // ★鉄球のヒットストップ復活！★
                 if (!isKO) {
                     hitStopTimer = Math.floor(damage / 2);
                     if (hitStopTimer < 3) hitStopTimer = 3;
