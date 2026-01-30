@@ -4,7 +4,7 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="Hit Stop Othello: Final Fix", layout="wide")
 
 # --- サイドバー ---
-st.sidebar.title("🍄 設定メニュー")
+st.sidebar.title("設定メニュー")
 
 # ★選択肢を変数で定義して、文字ズレを防ぐ！★
 OPT_BALL = "鉄球 (Iron Ball) ⚫"
@@ -26,7 +26,7 @@ laser_damage = 25
 giant_beam_damage = 15 
 
 if game_mode == "通常バトル (Normal)":
-    start_hp = st.sidebar.slider("白丸のHP", 100, 5000, 2500, step=100) 
+    start_hp = st.sidebar.slider("白丸のHP", 100, 5000, 200, step=100) 
     is_infinite_js = "false"
 else:
     start_hp = 9999
@@ -35,7 +35,7 @@ else:
 # ★変数を使って確実に分岐させる！★
 if weapon_mode == OPT_BALL:
     weapon_type_js = "'ball'"
-    st.sidebar.info("速度に応じてヒットストップが変化する「重量級」武器だっち！⚫")
+    st.sidebar.info("速度に応じてヒットストップが変化する「重量級」武器！⚫")
 
 elif weapon_mode == OPT_SWORD:
     weapon_type_js = "'sword'"
@@ -61,8 +61,8 @@ elif weapon_mode == OPT_BEAM:
     giant_beam_damage = st.sidebar.slider("☄️ ビーム威力(1hit)", 5, 50, 15)
     st.sidebar.caption(f"最大5hit時の合計: {giant_beam_damage * 5}")
 
-st.title("🍄 重力オセロ：武器選択バグ修正版🛠️")
-st.write("武器選択の不具合を修正したっち！これでちゃんと「ショットガン」や「レーザー」が使えるはずだっち！")
+st.title("ヒットストップで遊ぶ🛠️")
+st.write("いろんな武器でヒットストップを体験できるよ。")
 
 html_template = """
 <!DOCTYPE html>
