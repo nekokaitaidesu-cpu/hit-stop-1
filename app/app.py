@@ -1,14 +1,21 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Hit Stop Othello: Heavy Ball Return", layout="wide")
+st.set_page_config(page_title="Hit Stop Othello: Final Fix", layout="wide")
 
 # --- サイドバー ---
-st.sidebar.title("設定メニュー")
+st.sidebar.title("🍄 設定メニュー")
+
+# ★選択肢を変数で定義して、文字ズレを防ぐ！★
+OPT_BALL = "鉄球 (Iron Ball) ⚫"
+OPT_SWORD = "聖剣 (Holy Sword) ⚔️"
+OPT_SHOTGUN = "ショットガン (Shotgun) 🔫"
+OPT_LASER = "レーザーガン (Laser Gun) ⚡"
+OPT_BEAM = "極太ビーム (Giant Beam) ☄️"
 
 weapon_mode = st.sidebar.radio(
     "武器選択 ⚔️",
-    ("鉄球 (Iron Ball)", "聖剣 (Holy Sword)", "ショットガン (Shotgun) ", "レーザーガン (Laser Gun) ", "極太ビーム (Giant Beam) ")
+    (OPT_BALL, OPT_SWORD, OPT_SHOTGUN, OPT_LASER, OPT_BEAM)
 )
 game_mode = st.sidebar.radio("ゲームモード", ("通常バトル (Normal)", "無限サンドバッグ (Infinite) ♾️"))
 
@@ -19,38 +26,43 @@ laser_damage = 25
 giant_beam_damage = 15 
 
 if game_mode == "通常バトル (Normal)":
-    start_hp = st.sidebar.slider("白丸のHP", 100, 5000, 200, step=100) 
+    start_hp = st.sidebar.slider("白丸のHP", 100, 5000, 2500, step=100) 
     is_infinite_js = "false"
 else:
     start_hp = 9999
     is_infinite_js = "true"
 
-if weapon_mode == "鉄球 (Iron Ball)":
+# ★変数を使って確実に分岐させる！★
+if weapon_mode == OPT_BALL:
     weapon_type_js = "'ball'"
-    st.sidebar.info("速度に応じてヒットストップが変化する武器！⚫")
-elif weapon_mode == "聖剣 (Holy Sword)":
+    st.sidebar.info("速度に応じてヒットストップが変化する「重量級」武器だっち！⚫")
+
+elif weapon_mode == OPT_SWORD:
     weapon_type_js = "'sword'"
     st.sidebar.markdown("---")
     sword_hit_stop = st.sidebar.slider("⚔️ 斬撃の重さ", 0, 20, 5)
     expected_dmg = int(10 + (sword_hit_stop * 1.5))
     st.sidebar.caption(f"威力: {expected_dmg}ダメージ/1hit")
-elif weapon_mode == "ショットガン (Shotgun) 🔫":
+
+elif weapon_mode == OPT_SHOTGUN:
     weapon_type_js = "'shotgun'"
     st.sidebar.markdown("---")
     shotgun_damage = st.sidebar.slider("🔫 散弾1発の威力", 1, 20, 8)
     st.sidebar.caption(f"全弾威力: {shotgun_damage * 12}")
-elif weapon_mode == "レーザーガン (Laser Gun) ⚡":
+
+elif weapon_mode == OPT_LASER:
     weapon_type_js = "'laser'"
     st.sidebar.markdown("---")
     laser_damage = st.sidebar.slider("⚡ レーザー威力", 10, 100, 25)
-else:
+
+elif weapon_mode == OPT_BEAM:
     weapon_type_js = "'giant_beam'"
     st.sidebar.markdown("---")
     giant_beam_damage = st.sidebar.slider("☄️ ビーム威力(1hit)", 5, 50, 15)
     st.sidebar.caption(f"最大5hit時の合計: {giant_beam_damage * 5}")
 
-st.title("ヒットストップで気持ちよくなる")
-st.write("いろんな武器で白玉を叩いてみよう！")
+st.title("🍄 重力オセロ：武器選択バグ修正版🛠️")
+st.write("武器選択の不具合を修正したっち！これでちゃんと「ショットガン」や「レーザー」が使えるはずだっち！")
 
 html_template = """
 <!DOCTYPE html>
@@ -298,7 +310,7 @@ html_template = """
             isKO = true; white.hp = 0; hitStopTimer = KO_HIT_STOP;
             for(let i=0; i<80; i++) particles.push(new Particle(white.x, white.y, true));
         } else if (!isKO) {
-            hitStopTimer = 4; // デフォルト（上書きされる）
+            hitStopTimer = 4; // デフォルト（各武器で上書き）
             const pCount = Math.floor(damage / 5) + 3;
             for(let i=0; i<pCount; i++) particles.push(new Particle(hitX, hitY, false, isCritical ? '#ff00ff' : '#FFD700'));
         }
@@ -546,6 +558,7 @@ html_template = """
                 slashEffects.push(new SlashEffect(white.x, white.y, black.angle));
                 if (!isKO) hitStopTimer = SWORD_HIT_STOP_VAL;
             } else if (WEAPON_TYPE === 'ball') {
+                // ★鉄球のヒットストップ復活！★
                 if (!isKO) {
                     hitStopTimer = Math.floor(damage / 2);
                     if (hitStopTimer < 3) hitStopTimer = 3;
